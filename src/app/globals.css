@@ -5,6 +5,9 @@
   --foreground: #e8e8e8;
   --panel-bg: #111111;
   --panel-border: #1e1e1e;
+  --toolbar-bg: #111111;
+  --reader-bg: #0a0a0a;
+  --reader-page-bg: #111111;
   --accent: #3b82f6;
   --accent-hover: #2563eb;
   --text-secondary: #888888;
@@ -13,6 +16,11 @@
   --chat-ai-bg: #1a1a1a;
   --input-bg: #1a1a1a;
   --input-border: #2a2a2a;
+  --note-bg: #1a1a1a;
+  --note-quote: #d4d4d8;
+  --note-body: #f4f4f5;
+  --toc-bg: #111111;
+  --toc-active-bg: #1a1a1a;
   --scrollbar-thumb: #2a2a2a;
   --scrollbar-track: transparent;
 }
@@ -28,6 +36,27 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+.app-window-drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.app-window-no-drag,
+button,
+input,
+textarea,
+select,
+a,
+[role="button"],
+.react-pdf__Page,
+.react-pdf__Page *,
+#epub-area,
+#epub-area *,
+.context-menu,
+.translate-popover {
+  -webkit-app-region: no-drag;
 }
 
 ::-webkit-scrollbar {

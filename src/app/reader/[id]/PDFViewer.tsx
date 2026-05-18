@@ -256,8 +256,8 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
 
   if (!ready) {
     return (
-      <div className="flex-1 h-full w-full flex items-center justify-center bg-gray-900">
-        <div className="text-white/50 text-sm">正在加载 PDF 引擎...</div>
+      <div className="flex-1 h-full w-full flex items-center justify-center bg-[var(--reader-bg)]">
+        <div className="text-sm text-[var(--text-muted)]">正在加载 PDF 引擎...</div>
       </div>
     );
   }
@@ -268,7 +268,7 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
   return (
     <div
       ref={containerRef}
-      className="flex-1 h-full w-full overflow-auto bg-gray-900"
+      className="flex-1 h-full w-full overflow-auto bg-[var(--reader-bg)]"
       onContextMenu={onContextMenu}
       onMouseUp={handleMouseUp}
     >
@@ -282,7 +282,7 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
         onLoadError={(error: Error) => console.error("🚨 PDF 加载失败:", error.message)}
         onSourceError={(error: Error) => console.error("🚨 PDF 数据源错误:", error.message)}
         options={pdfOptions}
-        loading={<div className="text-white/70 text-sm py-20 text-center">正在渲染高清页面...</div>}
+        loading={<div className="py-20 text-center text-sm text-[var(--text-muted)]">正在渲染高清页面...</div>}
         className="flex flex-col items-center py-8 gap-4"
       >
         {numPages > 0 && Array.from({ length: numPages }, (_, i) => {
@@ -303,7 +303,7 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
               ) : (
                 <div
                   style={{ width: scaledWidth, height: estimatedPageHeight, contentVisibility: "auto", containIntrinsicSize: `${estimatedPageHeight}px` }}
-                  className="flex items-center justify-center bg-gray-800 text-white/15 text-xs select-none"
+                  className="flex select-none items-center justify-center bg-[var(--panel-bg)] text-xs text-[var(--text-muted)]"
                 >
                   {pageNum}
                 </div>

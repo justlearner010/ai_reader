@@ -30,8 +30,7 @@ import {
   Settings,
 } from "lucide-react";
 import { cleanText } from "@/utils/textCleaner";
-import { getBookById, deleteBook, getFileData, updateBookProgress, updateEpubProgress, getNotes, saveNote, deleteNote, updateNote, type BookMeta, type Note } from "@/utils/storage";
-import localforage from "localforage";
+import { getBookById, deleteBook, getBookFileBlob, updateBookProgress, updateEpubProgress, getNotes, saveNote, deleteNote, updateNote, loadReaderPreferences, saveReaderPreferences, type BookMeta, type Note, type ReaderPreferences } from "@/utils/storage";
 import "prismjs/themes/prism-tomorrow.css";
 
 function isCodeSnippet(text: string): boolean {
@@ -128,61 +127,125 @@ async function resolveOutlinePages(
   return result;
 }
 
-const THEMES = {
-  dark: { bg: "#09090b", text: "#daffde", name: "深色" },
-  sepia: { bg: "#f4ecd8", text: "#433422", name: "羊皮纸" },
-  green: { bg: "#cce8cf", text: "#1a2e1a", name: "护眼" },
-  light: { bg: "#ffffff", text: "#111111", name: "纯白" },
-} as const;
-
-type ThemeKey = keyof typeof THEMES;
-
-const THEME_VARS: Record<ThemeKey, Record<string, string>> = {
+const READER_THEMES = {
   dark: {
-    "--panel-bg": "#09090b",
-    "--panel-border": "#27272a",
-    "--text-muted": "#a1a1aa",
-    "--text-secondary": "#d4d4d8",
-    "--foreground": "#e4e4e7",
-    "--input-bg": "#18181b",
-    "--accent": "#10b981",
-    "--chat-user-bg": "#18181b",
-    "--chat-ai-bg": "#1a1a2e",
+    name: "深色",
+    bg: "#09090b",
+    text: "#e4e4e7",
+    vars: {
+      "--reader-bg": "#09090b",
+      "--reader-page-bg": "#111113",
+      "--toolbar-bg": "#111113",
+      "--panel-bg": "#09090b",
+      "--panel-border": "#27272a",
+      "--text-muted": "#a1a1aa",
+      "--text-secondary": "#d4d4d8",
+      "--foreground": "#e4e4e7",
+      "--input-bg": "#18181b",
+      "--input-border": "#27272a",
+      "--accent": "#10b981",
+      "--chat-user-bg": "#18181b",
+      "--chat-ai-bg": "#18181b",
+      "--note-bg": "#18181b",
+      "--note-quote": "#d4d4d8",
+      "--note-body": "#f4f4f5",
+      "--toc-bg": "#09090b",
+      "--toc-active-bg": "#18181b",
+    },
   },
   sepia: {
-    "--panel-bg": "#f4ecd8",
-    "--panel-border": "#d4c9a8",
-    "--text-muted": "#6b5d4a",
-    "--text-secondary": "#433422",
-    "--foreground": "#433422",
-    "--input-bg": "#efe3c9",
-    "--accent": "#8b5e3c",
-    "--chat-user-bg": "#efe3c9",
-    "--chat-ai-bg": "#e8dcc4",
+    name: "羊皮纸",
+    bg: "#f4ecd8",
+    text: "#433422",
+    vars: {
+      "--reader-bg": "#f4ecd8",
+      "--reader-page-bg": "#fbf3df",
+      "--toolbar-bg": "#efe3c9",
+      "--panel-bg": "#f4ecd8",
+      "--panel-border": "#d4c9a8",
+      "--text-muted": "#6b5d4a",
+      "--text-secondary": "#433422",
+      "--foreground": "#433422",
+      "--input-bg": "#efe3c9",
+      "--input-border": "#d4c9a8",
+      "--accent": "#8b5e3c",
+      "--chat-user-bg": "#efe3c9",
+      "--chat-ai-bg": "#e8dcc4",
+      "--note-bg": "#efe3c9",
+      "--note-quote": "#5f4a35",
+      "--note-body": "#2f2418",
+      "--toc-bg": "#efe3c9",
+      "--toc-active-bg": "#e8dcc4",
+    },
   },
   green: {
-    "--panel-bg": "#cce8cf",
-    "--panel-border": "#a8c8ab",
-    "--text-muted": "#2d5a2d",
-    "--text-secondary": "#1a2e1a",
-    "--foreground": "#1a2e1a",
-    "--input-bg": "#b8dcbb",
-    "--accent": "#16a34a",
-    "--chat-user-bg": "#b8dcbb",
-    "--chat-ai-bg": "#a8d0ab",
+    name: "护眼",
+    bg: "#cce8cf",
+    text: "#1a2e1a",
+    vars: {
+      "--reader-bg": "#cce8cf",
+      "--reader-page-bg": "#dff3e1",
+      "--toolbar-bg": "#b8dcbb",
+      "--panel-bg": "#cce8cf",
+      "--panel-border": "#8fbd96",
+      "--text-muted": "#2d5a2d",
+      "--text-secondary": "#1f3d1f",
+      "--foreground": "#1a2e1a",
+      "--input-bg": "#b8dcbb",
+      "--input-border": "#8fbd96",
+      "--accent": "#16803d",
+      "--chat-user-bg": "#b8dcbb",
+      "--chat-ai-bg": "#a8d0ab",
+      "--note-bg": "#b8dcbb",
+      "--note-quote": "#214521",
+      "--note-body": "#102510",
+      "--toc-bg": "#b8dcbb",
+      "--toc-active-bg": "#a8d0ab",
+    },
   },
   light: {
-    "--panel-bg": "#ffffff",
-    "--panel-border": "#e4e4e7",
-    "--text-muted": "#71717a",
-    "--text-secondary": "#3f3f46",
-    "--foreground": "#18181b",
-    "--input-bg": "#f4f4f5",
-    "--accent": "#10b981",
-    "--chat-user-bg": "#f4f4f5",
-    "--chat-ai-bg": "#e8f5e9",
+    name: "纯白",
+    bg: "#ffffff",
+    text: "#18181b",
+    vars: {
+      "--reader-bg": "#ffffff",
+      "--reader-page-bg": "#ffffff",
+      "--toolbar-bg": "#f4f4f5",
+      "--panel-bg": "#ffffff",
+      "--panel-border": "#e4e4e7",
+      "--text-muted": "#71717a",
+      "--text-secondary": "#3f3f46",
+      "--foreground": "#18181b",
+      "--input-bg": "#f4f4f5",
+      "--input-border": "#d4d4d8",
+      "--accent": "#0f766e",
+      "--chat-user-bg": "#f4f4f5",
+      "--chat-ai-bg": "#eef7f4",
+      "--note-bg": "#f4f4f5",
+      "--note-quote": "#3f3f46",
+      "--note-body": "#111827",
+      "--toc-bg": "#ffffff",
+      "--toc-active-bg": "#f4f4f5",
+    },
   },
-};
+} as const satisfies Record<string, { name: string; bg: string; text: string; vars: Record<string, string> }>;
+
+type ThemeKey = keyof typeof READER_THEMES;
+
+const READER_FONT_OPTIONS = [
+  { value: "font-system", label: "System" },
+  { value: "font-sans", label: "Sans" },
+  { value: "font-serif", label: "Serif" },
+  { value: "font-georgia", label: "Georgia" },
+  { value: "font-times", label: "Times" },
+  { value: "font-helvetica", label: "Helvetica" },
+  { value: "font-verdana", label: "Verdana" },
+  { value: "font-kaiti", label: "Kaiti" },
+  { value: "font-songti", label: "Songti" },
+  { value: "font-mono", label: "Mono" },
+] as const;
+
+type ReaderFontKey = typeof READER_FONT_OPTIONS[number]["value"];
 
 const PROVIDER_PRESETS: Record<string, { name: string; url: string; model: string }> = {
   deepseek: { name: 'DeepSeek 官方', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
@@ -270,23 +333,23 @@ const renderAIContent = (text: string) => {
     .replace(/>/g, '&gt;');
 
   html = html.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) => {
-    return `<div class="my-3 rounded-lg overflow-hidden border border-zinc-700 font-mono text-sm">
-      <div class="bg-zinc-800 text-zinc-400 px-3 py-1 text-xs flex justify-between uppercase">
+    return `<div class="my-3 rounded-lg overflow-hidden border border-[var(--panel-border)] font-mono text-sm">
+      <div class="bg-[var(--input-bg)] text-[var(--text-muted)] px-3 py-1 text-xs flex justify-between uppercase">
         <span>${lang || 'code'}</span>
       </div>
-      <pre class="bg-zinc-950 text-emerald-400 p-4 overflow-x-auto m-0 select-text font-mono leading-relaxed"><code>${code}</code></pre>
+      <pre class="bg-[var(--panel-bg)] text-[var(--accent)] p-4 overflow-x-auto m-0 select-text font-mono leading-relaxed"><code>${code}</code></pre>
     </div>`;
   });
 
-  html = html.replace(/`([^`]+)`/g, '<code class="bg-zinc-800 text-pink-400 px-1.5 py-0.5 rounded font-mono text-xs mx-0.5">$1</code>');
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-[var(--input-bg)] text-[var(--accent)] px-1.5 py-0.5 rounded font-mono text-xs mx-0.5">$1</code>');
 
-  html = html.replace(/\*\*([\s\S]+?)\*\*/g, '<strong class="font-bold text-zinc-100">$1</strong>');
+  html = html.replace(/\*\*([\s\S]+?)\*\*/g, '<strong class="font-bold text-[var(--foreground)]">$1</strong>');
 
-  html = html.replace(/^\s*###\s+(.+)$/gm, '<h3 class="text-zinc-100 font-bold text-base mt-4 mb-2">$1</h3>');
+  html = html.replace(/^\s*###\s+(.+)$/gm, '<h3 class="text-[var(--foreground)] font-bold text-base mt-4 mb-2">$1</h3>');
 
-  html = html.replace(/^\s*---\s*$/gm, '<hr class="my-4 border-t border-zinc-700" />');
+  html = html.replace(/^\s*---\s*$/gm, '<hr class="my-4 border-t border-[var(--panel-border)]" />');
 
-  html = html.replace(/^\s*-\s+(.+)$/gm, '<li class="list-disc list-inside ml-2 my-1 text-zinc-300">$1</li>');
+  html = html.replace(/^\s*-\s+(.+)$/gm, '<li class="list-disc list-inside ml-2 my-1 text-[var(--foreground)]">$1</li>');
 
   html = html.replace(/\n/g, '<br />');
 
@@ -347,9 +410,10 @@ export default function ReaderInner() {
   const [identityId, setIdentityId] = useState("default");
   const [userPrompt, setUserPrompt] = useState(AI_IDENTITIES.default.prompt);
   const [searchTerm, setSearchTerm] = useState("");
-  const [fontFamily, setFontFamily] = useState<"font-sans" | "font-serif" | "font-mono">("font-sans");
+  const [fontFamily, setFontFamily] = useState<ReaderFontKey>("font-sans");
   const [theme, setTheme] = useState<ThemeKey>("dark");
   const [fontSize, setFontSize] = useState(16);
+  const [epubWordSpacing, setEpubWordSpacing] = useState(0);
   const [isPrefsLoaded, setIsPrefsLoaded] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [sidebarTab, setSidebarTab] = useState<"chat" | "notes">("chat");
@@ -359,9 +423,11 @@ export default function ReaderInner() {
     pageNumber: number;
     content: string;
     isEditing: boolean;
+    anchor?: Note["anchor"];
   } | null>(null);
   const [initialProgress, setInitialProgress] = useState(0);
   const [initialCfi, setInitialCfi] = useState("");
+  const [currentEpubCfi, setCurrentEpubCfi] = useState("");
   const [returnToPage, setReturnToPage] = useState<number | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [apiConfig, setApiConfig] = useState<ApiConfig>({
@@ -388,6 +454,7 @@ export default function ReaderInner() {
   const [showConfig, setShowConfig] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const pdfDataRef = useRef<ArrayBuffer | null>(null);
@@ -459,15 +526,8 @@ export default function ReaderInner() {
   }, [translatePopover]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "b") {
-        e.preventDefault();
-        setIsSidebarOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+    if (initialCfi) setCurrentEpubCfi(initialCfi);
+  }, [initialCfi]);
 
   useEffect(() => {
     const arrayBuffer = pdfDataRef.current;
@@ -527,6 +587,7 @@ export default function ReaderInner() {
   }, [pdfData, bookFormat]);
 
   const handleEpubProgress = useCallback((cfi: string) => {
+    setCurrentEpubCfi(cfi);
     updateEpubProgress(bookId, cfi);
   }, [bookId]);
 
@@ -538,22 +599,35 @@ export default function ReaderInner() {
     setFontSize((prev) => Math.max(12, Math.min(32, prev + delta)));
   }, []);
 
+  const changeEpubWordSpacing = useCallback((delta: number) => {
+    setEpubWordSpacing((prev) => Math.max(0, Math.min(12, prev + delta)));
+  }, []);
+
   const handleThemeChange = useCallback((newTheme: ThemeKey) => {
     setTheme(newTheme);
   }, []);
 
   useEffect(() => {
     if (!isPrefsLoaded) return;
-    localforage.setItem('reader_preferences', { theme, fontSize, apiConfig });
-  }, [theme, fontSize, apiConfig, isPrefsLoaded]);
+    const timer = window.setTimeout(() => {
+      void saveReaderPreferences({ theme, fontSize, fontFamily, epubWordSpacing, apiConfig, identityId, userPrompt });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [theme, fontSize, fontFamily, epubWordSpacing, apiConfig, identityId, userPrompt, isPrefsLoaded]);
 
   useEffect(() => {
     const loadPrefs = async () => {
       try {
-        const savedSettings: any = await localforage.getItem('reader_preferences');
+        const savedSettings = await loadReaderPreferences() as ReaderPreferences & { apiConfig?: any };
         if (savedSettings) {
-          setTheme(savedSettings.theme || 'dark');
+          if (savedSettings.theme && savedSettings.theme in READER_THEMES) {
+            setTheme(savedSettings.theme as ThemeKey);
+          }
           setFontSize(savedSettings.fontSize || 16);
+          if (savedSettings.fontFamily && READER_FONT_OPTIONS.some((option) => option.value === savedSettings.fontFamily)) {
+            setFontFamily(savedSettings.fontFamily as ReaderFontKey);
+          }
+          setEpubWordSpacing(Math.max(0, Math.min(12, savedSettings.epubWordSpacing || 0)));
           if (savedSettings.apiConfig) {
             const old = savedSettings.apiConfig;
             if (typeof old.key !== 'undefined' && !old.cloud) {
@@ -595,6 +669,10 @@ export default function ReaderInner() {
             } else {
               setApiConfig({ ...old, temperature: old.temperature ?? 1.0 });
             }
+          }
+          if (savedSettings.identityId && AI_IDENTITIES[savedSettings.identityId]) {
+            setIdentityId(savedSettings.identityId);
+            setUserPrompt(savedSettings.userPrompt || AI_IDENTITIES[savedSettings.identityId].prompt);
           }
         }
       } catch (e) {
@@ -651,8 +729,8 @@ export default function ReaderInner() {
         console.log("🔍 [PARENT DIALOG] 1. 成功准备获取二进制文件，bookId:", bookId);
 
         try {
-          const fileResult = await getFileData(bookId);
-          console.log("🔍 [PARENT DIALOG] 2. getFileData 响应返回！对象是否存在:", !!fileResult);
+          const fileResult = await getBookFileBlob(book);
+          console.log("🔍 [PARENT DIALOG] 2. getBookFileBlob 响应返回！对象是否存在:", !!fileResult);
 
           if (fileResult) {
             console.log("🔍 [PARENT DIALOG] 3. 文件类型:", Object.prototype.toString.call(fileResult));
@@ -669,7 +747,7 @@ export default function ReaderInner() {
             return;
           }
         } catch (fetchErr) {
-          console.error("🚨 [PARENT FATAL ERROR] 从 localforage 读取文件流失败:", fetchErr);
+          console.error("🚨 [PARENT FATAL ERROR] 读取文件流失败:", fetchErr);
           setFileMissing(true);
           setIsLoading(false);
           return;
@@ -695,19 +773,6 @@ export default function ReaderInner() {
   }, [bookId, isLoading]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('reader_ai_identity');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.identityId && AI_IDENTITIES[parsed.identityId]) {
-          setIdentityId(parsed.identityId);
-          setUserPrompt(parsed.userPrompt || AI_IDENTITIES[parsed.identityId].prompt);
-        }
-      } catch { /* ignore */ }
-    }
-  }, []);
-
-  useEffect(() => {
     if (!bookId) return;
     getNotes(bookId).then(setNotes);
   }, [bookId]);
@@ -716,10 +781,6 @@ export default function ReaderInner() {
     if (!initialLoadDone.current || !bookId) return;
     localStorage.setItem(`chat_history_${bookId}`, JSON.stringify(messages));
   }, [messages, bookId]);
-
-  useEffect(() => {
-    localStorage.setItem('reader_ai_identity', JSON.stringify({ identityId, userPrompt }));
-  }, [identityId, userPrompt]);
 
   const handleClearChat = useCallback(() => {
     setMessages([]);
@@ -967,6 +1028,16 @@ export default function ReaderInner() {
     setTranslatePopover(null);
   }, [translatePopover, sendMessage]);
 
+  const buildNoteAnchor = useCallback((quote: string): Note["anchor"] => {
+    const textOffset = bookFormat === "txt" && quote ? Math.max(0, extractedText.indexOf(quote)) : undefined;
+    return {
+      format: bookFormat,
+      pageNumber: activePage,
+      epubCfi: bookFormat === "epub" ? currentEpubCfi || initialCfi || undefined : undefined,
+      textOffset,
+    };
+  }, [activePage, bookFormat, currentEpubCfi, extractedText, initialCfi]);
+
   const handleStartNote = useCallback(() => {
     if (!translatePopover) return;
     setEditingNote({
@@ -974,10 +1045,24 @@ export default function ReaderInner() {
       pageNumber: activePage,
       content: "",
       isEditing: false,
+      anchor: buildNoteAnchor(translatePopover.word),
     });
     setSidebarTab("notes");
+    setIsSidebarOpen(true);
     setTranslatePopover(null);
-  }, [translatePopover, activePage]);
+  }, [translatePopover, activePage, buildNoteAnchor]);
+
+  const handleStartManualNote = useCallback(() => {
+    setEditingNote({
+      quote: bookFormat === "txt" ? "当前位置" : `第 ${activePage} 页`,
+      pageNumber: activePage,
+      content: "",
+      isEditing: false,
+      anchor: buildNoteAnchor(""),
+    });
+    setSidebarTab("notes");
+    setIsSidebarOpen(true);
+  }, [activePage, bookFormat, buildNoteAnchor]);
 
   const handleSaveEditingNote = useCallback(async () => {
     if (!editingNote || !editingNote.content.trim() || !bookId) return;
@@ -990,6 +1075,7 @@ export default function ReaderInner() {
         content: editingNote.content.trim(),
         createdAt: Date.now(),
         chapter,
+        anchor: editingNote.anchor || buildNoteAnchor(editingNote.quote),
       };
       const updated = await updateNote(bookId, updatedNote);
       setNotes(updated);
@@ -1001,12 +1087,13 @@ export default function ReaderInner() {
         content: editingNote.content.trim(),
         createdAt: Date.now(),
         chapter,
+        anchor: editingNote.anchor || buildNoteAnchor(editingNote.quote),
       };
       const updated = await saveNote(bookId, note);
       setNotes(updated);
     }
     setEditingNote(null);
-  }, [editingNote, bookId, tocItems]);
+  }, [editingNote, bookId, tocItems, buildNoteAnchor]);
 
   const handleEditNote = useCallback((note: Note) => {
     setEditingNote({
@@ -1015,6 +1102,7 @@ export default function ReaderInner() {
       pageNumber: note.pageNumber,
       content: note.content,
       isEditing: true,
+      anchor: note.anchor,
     });
   }, []);
 
@@ -1037,6 +1125,58 @@ export default function ReaderInner() {
     a.click();
     URL.revokeObjectURL(url);
   }, [bookTitle, notes, bookId]);
+
+  const runAppCommand = useCallback((command: string) => {
+    if (command === "import-book") fileInputRef.current?.click();
+    if (command === "open-library") router.push("/");
+    if (command === "focus-search") {
+      setIsSidebarOpen(true);
+      setSidebarTab("chat");
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
+    if (command === "toggle-sidebar") setIsSidebarOpen((prev) => !prev);
+    if (command === "new-note") handleStartManualNote();
+  }, [handleStartManualNote, router]);
+
+  useEffect(() => {
+    const handleCommand = (event: Event) => {
+      const command = (event as CustomEvent<string>).detail;
+      if (command) runAppCommand(command);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const commandKey = e.ctrlKey || e.metaKey;
+      if (!commandKey) return;
+      const key = e.key.toLowerCase();
+      if (key === "b") {
+        e.preventDefault();
+        runAppCommand("toggle-sidebar");
+      }
+      if (key === "l") {
+        e.preventDefault();
+        runAppCommand("open-library");
+      }
+      if (key === "f") {
+        e.preventDefault();
+        runAppCommand("focus-search");
+      }
+      if (key === "o") {
+        e.preventDefault();
+        runAppCommand("import-book");
+      }
+      if (key === "n") {
+        e.preventDefault();
+        runAppCommand("new-note");
+      }
+    };
+
+    window.addEventListener("ai-reader-command", handleCommand);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("ai-reader-command", handleCommand);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [runAppCommand]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
@@ -1150,28 +1290,37 @@ export default function ReaderInner() {
   if (notFound) return <div className="flex h-full flex-col items-center justify-center gap-4 bg-[var(--background)]"><p className="text-[var(--text-muted)]">书籍未找到</p><button onClick={() => router.push("/")} className="cursor-pointer rounded-lg border border-[var(--panel-border)] px-4 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]">返回书架</button></div>;
   if (fileMissing) return <div className="flex h-full flex-col items-center justify-center gap-4 bg-[var(--background)]"><p className="text-red-400">文件数据丢失，请返回书架重新上传该书</p><button onClick={() => router.push("/")} className="cursor-pointer rounded-lg border border-[var(--panel-border)] px-4 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]">返回书架</button></div>;
   if (!isPrefsLoaded) return (
-    <div className="flex h-screen w-full items-center justify-center bg-zinc-950 text-zinc-500">
+    <div className="flex h-screen w-full items-center justify-center bg-[var(--background)] text-[var(--text-muted)]">
       正在加载个人阅读偏好...
     </div>
   );
 
   const leftPct = `${Math.round(leftRatio * 100)}%`;
   const rightPct = `${Math.round((1 - leftRatio) * 100)}%`;
+  const dividerWidth = 4;
   const leftPanelWidth = isSidebarOpen
     ? (showToc && tocItems.length > 0 ? `calc(${leftPct} - 224px)` : leftPct)
     : "100%";
+  const rightPanelWidth = isSidebarOpen ? `calc(${rightPct} - ${dividerWidth}px)` : "0px";
+  const activeThemeVars = READER_THEMES[theme].vars;
 
   return (
-    <div className="flex h-full">
+    <div
+      className="flex h-full bg-[var(--reader-bg)] text-[var(--foreground)]"
+      style={activeThemeVars as Record<string, string>}
+    >
       {showToc && tocItems.length > 0 && (
-        <div className="flex w-56 shrink-0 flex-col border-r border-[var(--panel-border)] bg-[#0d0d0d]">
+        <div
+          className="flex w-56 shrink-0 flex-col border-r border-[var(--panel-border)] bg-[var(--toc-bg)]"
+          style={{ backgroundColor: activeThemeVars["--toc-bg"], borderColor: activeThemeVars["--panel-border"] }}
+        >
           <div className="flex items-center justify-between border-b border-[var(--panel-border)] px-4 py-3">
             <span className="text-xs font-medium text-[var(--text-muted)]">目录</span>
             <button onClick={() => setShowToc(false)} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:bg-white/5"><PanelRightClose size={14} /></button>
           </div>
           <div className="flex-1 overflow-y-auto py-2">
             {bookFormat === "pdf" && tocItems.map((item, i) => (
-              <button key={i} onClick={() => { pdfViewerRef.current?.scrollToPage(item.page || 1); setShowToc(false); }} className="w-full cursor-pointer px-4 py-1.5 text-left text-sm transition-colors hover:bg-white/5" style={{ paddingLeft: `${12 + item.level * 16}px` }}>
+              <button key={i} onClick={() => { pdfViewerRef.current?.scrollToPage(item.page || 1); setShowToc(false); }} className="w-full cursor-pointer px-4 py-1.5 text-left text-sm transition-colors hover:bg-[var(--toc-active-bg)]" style={{ paddingLeft: `${12 + item.level * 16}px` }}>
                 <span className="text-[var(--text-secondary)] hover:text-[var(--foreground)]">{item.title}</span>
               </button>
             ))}
@@ -1179,42 +1328,55 @@ export default function ReaderInner() {
         </div>
       )}
 
-      <div className={`flex min-w-0 flex-col ${fontFamily}`} style={{ width: leftPanelWidth, backgroundColor: THEMES[theme].bg, ...THEME_VARS[theme] as Record<string, string> }}>
-        <div className="flex items-center gap-2 border-b border-[var(--panel-border)] px-4 py-3">
+      <div className={`relative z-0 flex min-w-0 flex-col overflow-hidden ${fontFamily}`} style={{ width: leftPanelWidth, backgroundColor: "var(--reader-bg)" }}>
+        <div className="app-window-drag-region relative z-0 flex w-full min-w-0 flex-nowrap items-center gap-2 overflow-hidden border-b border-[var(--panel-border)] bg-[var(--toolbar-bg)] py-3 pl-28 pr-4">
           <button onClick={() => router.push("/")} className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"><ArrowLeft size={14} />书架</button>
           <input ref={fileInputRef} type="file" accept=".pdf,.epub,.txt" className="hidden" onChange={handleFileChange} />
-          <button onClick={handleUploadClick} className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><Upload size={14} />上传</button>
+          <button onClick={handleUploadClick} className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><Upload size={14} />上传</button>
           {tocItems.length > 0 && (
-            <button onClick={() => setShowToc((v) => !v)} className="flex cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><List size={14} />目录</button>
+            <button onClick={() => setShowToc((v) => !v)} className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><List size={14} />目录</button>
           )}
-          <button onClick={handleDeleteBook} className="flex cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-red-500 hover:text-red-400"><Trash2 size={14} />删除</button>
-          <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value as "font-sans" | "font-serif" | "font-mono")} className="cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-2 py-1.5 text-xs text-[var(--text-secondary)] outline-none transition-colors hover:border-[var(--accent)]">
-            <option value="font-sans">Sans</option>
-            <option value="font-serif">Serif</option>
-            <option value="font-mono">Mono</option>
+          <button onClick={handleDeleteBook} className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-red-500 hover:text-red-400"><Trash2 size={14} />删除</button>
+          <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value as ReaderFontKey)} className="shrink-0 cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-2 py-1.5 text-xs text-[var(--text-secondary)] outline-none transition-colors hover:border-[var(--accent)]">
+            {READER_FONT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
-          <div className="flex items-center gap-1.5 mx-2">
-            {(Object.keys(THEMES) as ThemeKey[]).map((key) => (
+          <div className="mx-2 flex shrink-0 items-center gap-1.5">
+            {(Object.keys(READER_THEMES) as ThemeKey[]).map((key) => (
               <button
                 key={key}
                 onClick={() => handleThemeChange(key)}
-                className={`h-5 w-5 rounded-full cursor-pointer border-2 transition-all ${theme === key ? "border-white scale-110" : "border-transparent"}`}
-                style={{ backgroundColor: THEMES[key].bg }}
-                title={THEMES[key].name}
+                className="h-5 w-5 cursor-pointer rounded-full border-2 transition-all"
+                style={{
+                  backgroundColor: READER_THEMES[key].bg,
+                  borderColor: theme === key ? "var(--accent)" : "transparent",
+                  transform: theme === key ? "scale(1.1)" : "scale(1)",
+                }}
+                title={READER_THEMES[key].name}
               />
             ))}
           </div>
 
-          <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
+          <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
             <button onClick={() => changeFontSize(-2)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="缩小字号">A-</button>
             <span className="w-8 text-center tabular-nums">{fontSize}px</span>
             <button onClick={() => changeFontSize(2)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="放大字号">A+</button>
           </div>
 
-          <button onClick={() => setShowSettings(true)} className="flex cursor-pointer items-center rounded-lg px-2 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]" title="AI 设置"><Settings size={14} /></button>
+          {bookFormat === "epub" && (
+            <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
+              <span className="text-[11px]">词距</span>
+              <button onClick={() => changeEpubWordSpacing(-1)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="缩小词间距">W-</button>
+              <span className="w-8 text-center tabular-nums">{epubWordSpacing}px</span>
+              <button onClick={() => changeEpubWordSpacing(1)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="增大词间距">W+</button>
+            </div>
+          )}
+
+          <button onClick={() => setShowSettings(true)} className="flex shrink-0 cursor-pointer items-center rounded-lg px-2 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]" title="AI 设置"><Settings size={14} /></button>
 
           {bookFormat === "pdf" && totalPages > 0 && (
-            <div className="ml-auto flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <div className="ml-auto flex min-w-0 shrink items-center justify-end gap-2 overflow-hidden text-xs text-[var(--text-muted)]">
               <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.2))} className="cursor-pointer rounded p-0.5 transition-colors hover:text-[var(--foreground)]"><ZoomOut size={14} /></button>
               <span className="w-10 text-center">{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom((z) => Math.min(3, z + 0.2))} className="cursor-pointer rounded p-0.5 transition-colors hover:text-[var(--foreground)]"><ZoomIn size={14} /></button>
@@ -1240,14 +1402,14 @@ export default function ReaderInner() {
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]" style={{ marginLeft: bookFormat === "pdf" && totalPages > 0 ? "12px" : "auto" }}><BookOpen size={12} /><span className="max-w-28 truncate">{bookTitle}</span></div>
-          <button onClick={() => setIsSidebarOpen((prev) => !prev)} className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]" title={isSidebarOpen ? "收起侧边栏 (Ctrl+B)" : "展开侧边栏 (Ctrl+B)"}>{isSidebarOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}</button>
+          <div className="flex min-w-0 shrink items-center gap-1.5 text-xs text-[var(--text-muted)]" style={{ marginLeft: bookFormat === "pdf" && totalPages > 0 ? "12px" : "auto" }}><BookOpen size={12} className="shrink-0" /><span className="max-w-28 truncate">{bookTitle}</span></div>
+          <button onClick={() => setIsSidebarOpen((prev) => !prev)} className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]" title={isSidebarOpen ? "收起侧边栏 (Ctrl+B)" : "展开侧边栏 (Ctrl+B)"}>{isSidebarOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}</button>
         </div>
 
         {totalPages > 0 && (
-          <div className="h-0.5 w-full bg-gray-800">
+          <div className="h-0.5 w-full bg-[var(--panel-border)]">
             <div
-              className="h-full bg-emerald-500 transition-all duration-300"
+              className="h-full bg-[var(--accent)] transition-all duration-300"
               style={{ width: `${Math.round((activePage / totalPages) * 100)}%` }}
             />
           </div>
@@ -1269,8 +1431,8 @@ export default function ReaderInner() {
                 initialProgress={initialProgress}
               />
           ) : (
-            <div className="flex-1 h-full w-full flex items-center justify-center bg-gray-900">
-              <div className="text-white/50 text-sm">加载 PDF 数据中...</div>
+            <div className="flex-1 h-full w-full flex items-center justify-center bg-[var(--reader-bg)]">
+              <div className="text-sm text-[var(--text-muted)]">加载 PDF 数据中...</div>
             </div>
           )
         )}
@@ -1280,37 +1442,42 @@ export default function ReaderInner() {
           pdfData ? (
             <EpubViewer
               fileData={pdfData}
-              theme={theme === "sepia" ? "light" : theme}
+              theme={theme}
               fontSize={fontSize}
+              fontFamily={fontFamily}
+              wordSpacing={epubWordSpacing}
               bookId={bookId}
               initialCfi={initialCfi || undefined}
               onProgress={handleEpubProgress}
               onTextExtracted={handleEpubTextExtracted}
             />
           ) : (
-            <div className="flex-1 h-full w-full flex items-center justify-center bg-gray-900">
-              <div className="text-white/50 text-sm">加载 EPUB 数据中...</div>
+            <div className="flex-1 h-full w-full flex items-center justify-center bg-[var(--reader-bg)]">
+              <div className="text-sm text-[var(--text-muted)]">加载 EPUB 数据中...</div>
             </div>
           )
         )}
 
         {/* TXT Render */}
         {bookFormat === "txt" && (
-          <div className="flex-1 overflow-y-auto whitespace-pre-wrap p-8 text-sm leading-relaxed font-serif" style={{ color: THEMES[theme].text, backgroundColor: THEMES[theme].bg, fontSize: `${fontSize}px`, lineHeight: "1.6" }}>
+          <div className="flex-1 overflow-y-auto whitespace-pre-wrap bg-[var(--reader-page-bg)] p-8 text-sm leading-relaxed text-[var(--foreground)] font-serif" style={{ fontSize: `${fontSize}px`, lineHeight: "1.6" }}>
             {extractedText}
           </div>
         )}
       </div>
 
       {isSidebarOpen && (
-        <div className="flex shrink-0 cursor-col-resize items-center justify-center bg-[var(--panel-border)] transition-colors hover:bg-[var(--accent)]" onMouseDown={() => { isDragging.current = true; document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; }} style={{ width: 4 }}><GripVertical size={10} className="text-[var(--text-muted)]" /></div>
+        <div className="relative z-20 flex shrink-0 cursor-col-resize items-center justify-center bg-[var(--panel-border)] transition-colors hover:bg-[var(--accent)]" onMouseDown={() => { isDragging.current = true; document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none"; }} style={{ width: dividerWidth }}><GripVertical size={10} className="text-[var(--text-muted)]" /></div>
       )}
 
       {isSidebarOpen && (
-      <div className="flex min-w-0 flex-col bg-[var(--panel-bg)]" style={{ width: rightPct }}>
+      <div
+        className="relative z-10 flex min-w-0 flex-col overflow-hidden bg-[var(--panel-bg)] text-[var(--foreground)]"
+        style={{ width: rightPanelWidth, backgroundColor: activeThemeVars["--panel-bg"] }}
+      >
         <div className="flex border-b border-[var(--panel-border)]">
           <button onClick={() => setSidebarTab("chat")} className={`flex cursor-pointer items-center gap-1.5 px-5 py-2.5 text-xs font-medium transition-colors ${sidebarTab === "chat" ? "border-b-2 border-[var(--accent)] text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--foreground)]"}`}><Bot size={14} />AI 助理</button>
-          <button onClick={() => setSidebarTab("notes")} className={`flex cursor-pointer items-center gap-1.5 px-5 py-2.5 text-xs font-medium transition-colors ${sidebarTab === "notes" ? "border-b-2 border-amber-500 text-amber-400" : "text-[var(--text-muted)] hover:text-[var(--foreground)]"}`}><StickyNote size={14} />图书笔记{notes.length > 0 ? <span className="ml-0.5 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">{notes.length}</span> : null}</button>
+          <button onClick={() => setSidebarTab("notes")} className={`flex cursor-pointer items-center gap-1.5 px-5 py-2.5 text-xs font-medium transition-colors ${sidebarTab === "notes" ? "border-b-2 border-[var(--accent)] text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--foreground)]"}`}><StickyNote size={14} />图书笔记{notes.length > 0 ? <span className="ml-0.5 rounded-full bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] text-[var(--accent)]">{notes.length}</span> : null}</button>
         </div>
 
         {sidebarTab === "chat" && (
@@ -1324,7 +1491,7 @@ export default function ReaderInner() {
             </div>
             <div className="border-b border-[var(--panel-border)] px-5 py-2">
               <div className="flex items-center gap-2 rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-1.5 transition-colors focus-within:border-[var(--accent)]">
-                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleVocabularySearch(); } }} placeholder="查询词汇/术语（如：虚拟内存）" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--text-muted)]" />
+                <input ref={searchInputRef} type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleVocabularySearch(); } }} placeholder="查询词汇/术语（如：虚拟内存）" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--text-muted)]" />
                 <button onClick={handleVocabularySearch} className="flex cursor-pointer items-center justify-center rounded p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"><Search size={13} /></button>
               </div>
             </div>
@@ -1437,7 +1604,7 @@ export default function ReaderInner() {
               {messages.length === 0 && <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--text-muted)]"><Bot size={24} className="opacity-30" /><p className="text-xs">开始提问，AI 将基于当前页面内容回答</p></div>}
               {messages.filter(msg => msg.role !== 'system').map((msg, i) => (
                 <div key={i} className="flex gap-3">
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${msg.role === "user" ? "bg-blue-500/20 text-blue-400" : "bg-emerald-500/20 text-emerald-400"}`}>
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${msg.role === "user" ? "bg-[var(--chat-user-bg)] text-[var(--accent)]" : "bg-[var(--chat-ai-bg)] text-[var(--accent)]"}`}>
                     {msg.role === "user" ? <User size={15} /> : <Bot size={15} />}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1452,7 +1619,7 @@ export default function ReaderInner() {
                             <p className="mt-0.5"><span className="font-medium text-[var(--foreground)]">当前语境</span>：{msg.parsed.context}</p>
                           </div>
                         </div>
-                      ) : msg.content ? <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap select-text pr-2" dangerouslySetInnerHTML={{ __html: memoizedHtmlContents[i] }} onContextMenu={(e) => { const selection = window.getSelection(); const selectedText = selection ? selection.toString().trim() : ''; if (selectedText) { e.preventDefault(); setAiContextMenu({ x: e.clientX, y: e.clientY, text: selectedText }); } }} /> : <span className="inline-flex items-center gap-1"><Loader2 size={14} className="animate-spin text-[var(--text-muted)]" /><span className="text-[var(--text-muted)]">思考中...</span></span>}
+                      ) : msg.content ? <div className="select-text whitespace-pre-wrap pr-2 text-sm leading-relaxed text-[var(--foreground)]" dangerouslySetInnerHTML={{ __html: memoizedHtmlContents[i] }} onContextMenu={(e) => { const selection = window.getSelection(); const selectedText = selection ? selection.toString().trim() : ''; if (selectedText) { e.preventDefault(); setAiContextMenu({ x: e.clientX, y: e.clientY, text: selectedText }); } }} /> : <span className="inline-flex items-center gap-1"><Loader2 size={14} className="animate-spin text-[var(--text-muted)]" /><span className="text-[var(--text-muted)]">思考中...</span></span>}
                     </div>
                   </div>
                 </div>
@@ -1473,19 +1640,19 @@ export default function ReaderInner() {
         {sidebarTab === "notes" && (
           <div className="flex-1 overflow-y-auto px-5 py-5">
             {returnToPage && (
-              <div className="mb-3 flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
-                <span className="text-xs text-emerald-400">已跳转到笔记位置</span>
-                <button onClick={() => { pdfViewerRef.current?.scrollToPage(returnToPage); setReturnToPage(null); }} className="flex cursor-pointer items-center gap-1 rounded bg-emerald-500/20 px-2 py-1 text-[10px] text-emerald-400 transition-colors hover:bg-emerald-500/30"><ArrowUpRight size={10} />返回 P. {returnToPage}</button>
+              <div className="mb-3 flex items-center justify-between rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-3 py-2">
+                <span className="text-xs text-[var(--accent)]">已跳转到笔记位置</span>
+                <button onClick={() => { pdfViewerRef.current?.scrollToPage(returnToPage); setReturnToPage(null); }} className="flex cursor-pointer items-center gap-1 rounded bg-[var(--accent)]/15 px-2 py-1 text-[10px] text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/25"><ArrowUpRight size={10} />返回 P. {returnToPage}</button>
               </div>
             )}
             {editingNote && (
-              <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-                <div className="mb-2 flex items-center gap-2"><StickyNote size={14} className="text-amber-400" /><span className="text-xs font-medium text-amber-400">{editingNote.isEditing ? "编辑笔记" : "新建笔记"}</span></div>
-                <p className="mb-2 border-l-2 border-amber-500/30 pl-2 text-xs italic text-[var(--text-muted)]">“{editingNote.quote}”</p>
-                <textarea value={editingNote.content} onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })} placeholder="写下你的想法..." className="mb-3 min-h-[80px] w-full resize-none rounded-lg border border-[var(--panel-border)] bg-[#0d0d0d] p-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-muted)] transition-colors focus:border-amber-500/50" />
+              <div className="mb-4 rounded-xl border border-[var(--accent)]/30 bg-[var(--note-bg)] p-4">
+                <div className="mb-2 flex items-center gap-2"><StickyNote size={14} className="text-[var(--accent)]" /><span className="text-xs font-medium text-[var(--accent)]">{editingNote.isEditing ? "编辑笔记" : "新建笔记"}</span></div>
+                <p className="mb-2 border-l-2 border-[var(--accent)]/40 pl-2 text-sm italic leading-relaxed text-[var(--note-quote)]">“{editingNote.quote}”</p>
+                <textarea value={editingNote.content} onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })} placeholder="写下你的想法..." className="mb-3 min-h-[80px] w-full resize-none rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] p-3 text-[15px] leading-7 text-[var(--note-body)] outline-none placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--accent)]" />
                 <div className="flex items-center justify-end gap-2">
                   <button onClick={() => setEditingNote(null)} className="cursor-pointer rounded-lg px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--foreground)]">取消</button>
-                  <button onClick={handleSaveEditingNote} className="flex cursor-pointer items-center gap-1 rounded-lg bg-amber-500 px-3 py-1.5 text-xs text-white transition-colors hover:bg-amber-600"><Bookmark size={12} />{editingNote.isEditing ? "更新笔记" : "保存笔记"}</button>
+                  <button onClick={handleSaveEditingNote} className="flex cursor-pointer items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs text-white transition-opacity hover:opacity-90"><Bookmark size={12} />{editingNote.isEditing ? "更新笔记" : "保存笔记"}</button>
                 </div>
               </div>
             )}
@@ -1500,19 +1667,19 @@ export default function ReaderInner() {
             ) : (
               <div className="space-y-3">
                 {[...notes].reverse().map((note) => (
-                  <div key={note.id} className="group cursor-pointer rounded-xl border border-[var(--panel-border)] bg-[var(--chat-ai-bg)] p-4 transition-colors hover:border-amber-500/40" onClick={() => { setReturnToPage(activePage); pdfViewerRef.current?.scrollToPage(note.pageNumber); }}>
+                  <div key={note.id} className="group cursor-pointer rounded-xl border border-[var(--panel-border)] bg-[var(--note-bg)] p-4 transition-colors hover:border-[var(--accent)]/60" onClick={() => { setReturnToPage(activePage); if (bookFormat === "pdf") pdfViewerRef.current?.scrollToPage(note.pageNumber); }}>
                     <div className="mb-2 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
-                        <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">P. {note.pageNumber}</span>
+                        <span className="rounded bg-[var(--accent)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">{note.anchor?.format === "epub" ? "EPUB" : `P. ${note.pageNumber}`}</span>
                         {note.chapter && <span className="text-[10px] text-[var(--text-muted)]">| {note.chapter}</span>}
                       </span>
                       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button onClick={(e) => { e.stopPropagation(); handleEditNote(note); }} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:text-amber-400"><Edit size={12} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleEditNote(note); }} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"><Edit size={12} /></button>
                         <button onClick={(e) => { e.stopPropagation(); deleteNote(bookId!, note.id).then(setNotes); }} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:text-red-400"><Trash2 size={12} /></button>
                       </div>
                     </div>
-                    <p className="mb-2 border-l-2 border-[var(--panel-border)] pl-2 text-xs italic text-[var(--text-muted)]">“{note.quote}”</p>
-                    <p className="text-sm leading-relaxed text-[var(--foreground)]">{note.content}</p>
+                    <p className="mb-3 border-l-2 border-[var(--accent)]/50 pl-3 text-sm leading-relaxed text-[var(--note-quote)]">“{note.quote}”</p>
+                    <p className="text-[15px] font-medium leading-7 text-[var(--note-body)]">{note.content}</p>
                   </div>
                 ))}
               </div>
@@ -1524,7 +1691,7 @@ export default function ReaderInner() {
 
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowSettings(false)}>
-          <div className="w-full max-w-md rounded-xl border border-[var(--panel-border)] bg-[#1a1a1a] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-5 flex items-center justify-between">
               <span className="text-sm font-medium text-[var(--foreground)]">AI 引擎配置</span>
               <button onClick={() => setShowSettings(false)} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--foreground)]"><Settings size={16} /></button>
@@ -1542,7 +1709,7 @@ export default function ReaderInner() {
                   <select
                     value={apiConfig.cloud.currentProvider}
                     onChange={(e) => setApiConfig((prev) => ({ ...prev, cloud: { ...prev.cloud, currentProvider: e.target.value } }))}
-                    className="w-full cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[#0d0d0d] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                    className="w-full cursor-pointer rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                   >
                     {Object.entries(PROVIDER_PRESETS).map(([key, preset]) => (
                       <option key={key} value={key}>{preset.name}</option>
@@ -1559,7 +1726,7 @@ export default function ReaderInner() {
                     ? { ...prev, cloud: { ...prev.cloud, customUrl: e.target.value } }
                     : { ...prev, local: { ...prev.local, url: e.target.value } })}
                   placeholder={apiConfig.engineMode === 'cloud' ? PROVIDER_PRESETS[apiConfig.cloud.currentProvider]?.url : "http://localhost:11434/v1"}
-                  className="w-full rounded-lg border border-[var(--panel-border)] bg-[#0d0d0d] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                  className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                 />
               </div>
 
@@ -1576,7 +1743,7 @@ export default function ReaderInner() {
                         keys: { ...prev.cloud.keys, [prev.cloud.currentProvider]: e.target.value },
                       },
                     }))}
-                    className="w-full rounded-lg border border-[var(--panel-border)] bg-[#0d0d0d] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                    className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                   />
                 </div>
               )}
@@ -1590,7 +1757,7 @@ export default function ReaderInner() {
                     ? { ...prev, cloud: { ...prev.cloud, customModel: e.target.value } }
                     : { ...prev, local: { ...prev.local, model: e.target.value } })}
                   placeholder={apiConfig.engineMode === 'cloud' ? PROVIDER_PRESETS[apiConfig.cloud.currentProvider]?.model : "qwen2.5"}
-                  className="w-full rounded-lg border border-[var(--panel-border)] bg-[#0d0d0d] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                  className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                 />
               </div>
 
@@ -1603,24 +1770,24 @@ export default function ReaderInner() {
       )}
 
       {contextMenu && (
-        <div className="context-menu fixed z-50 min-w-36 rounded-xl border border-[var(--panel-border)] bg-[#1a1a1a] py-1 shadow-2xl" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <button onClick={handleExplainSelection} className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-white/10"><Bot size={14} className="text-[var(--accent)]" />AI 解释</button>
-          <button onClick={handleTranslate} className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-white/10"><BookOpen size={14} className="text-emerald-400" />AI 翻译</button>
+        <div className="context-menu fixed z-50 min-w-36 rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] py-1 shadow-2xl" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button onClick={handleExplainSelection} className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--input-bg)]"><Bot size={14} className="text-[var(--accent)]" />AI 解释</button>
+          <button onClick={handleTranslate} className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--input-bg)]"><BookOpen size={14} className="text-[var(--accent)]" />AI 翻译</button>
         </div>
       )}
 
       {translatePopover && translatePopover.isCode ? (
         <div ref={translatePopoverRef} className="translate-popover fixed z-50 -translate-x-1/2 rounded-lg border border-[var(--panel-border)] shadow-2xl" style={{ left: translatePopover.x, top: translatePopover.y, maxWidth: 500, minWidth: 260 }}>
-          <div className="flex items-center justify-between rounded-t-lg bg-[#2d2d2d] px-3 py-1.5 border-b border-white/10">
+          <div className="flex items-center justify-between rounded-t-lg border-b border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5">
             <span className="text-[10px] text-white/40 font-mono tracking-wider">C</span>
             <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(translatePopover.word).then(() => setCopied(true)); setTimeout(() => setCopied(false), 1500); }} className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-white/40 transition-colors hover:text-white/80"><Copy size={11} />{copied ? "Copied!" : "Copy"}</button>
           </div>
-          <pre className="m-0 overflow-x-auto rounded-b-lg p-0" style={{ background: "#2d2d2d", margin: 0 }}>
+          <pre className="m-0 overflow-x-auto rounded-b-lg bg-[var(--input-bg)] p-0">
             <code id="code-highlight-content" className="language-c block p-4 text-[13px] leading-[1.6]" />
           </pre>
         </div>
       ) : translatePopover && (
-        <div ref={translatePopoverRef} className="translate-popover fixed z-50 w-auto min-w-24 max-w-64 -translate-x-1/2 rounded-lg border border-[var(--panel-border)] bg-[#1a1a1a] px-3 py-2 shadow-2xl" style={{ left: translatePopover.x, top: translatePopover.y }}>
+        <div ref={translatePopoverRef} className="translate-popover fixed z-50 w-auto min-w-24 max-w-64 -translate-x-1/2 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg)] px-3 py-2 shadow-2xl" style={{ left: translatePopover.x, top: translatePopover.y }}>
           {translatePopover.loading ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)]"><Loader2 size={12} className="animate-spin" />翻译中...</span>
           ) : (
@@ -1631,7 +1798,7 @@ export default function ReaderInner() {
                 <span className="whitespace-pre-wrap text-xs text-[var(--text-muted)]">{translatePopover.word}</span>
               )}
               <button onClick={(e) => { e.stopPropagation(); handlePopoverExplain(); }} className="flex cursor-pointer items-center gap-1 rounded bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20"><Bot size={11} />AI 解释</button>
-              <button onClick={(e) => { e.stopPropagation(); handleStartNote(); }} className="flex cursor-pointer items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400 transition-colors hover:bg-amber-500/20"><StickyNote size={11} />添加笔记</button>
+              <button onClick={(e) => { e.stopPropagation(); handleStartNote(); }} className="flex cursor-pointer items-center gap-1 rounded bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20"><StickyNote size={11} />添加笔记</button>
             </div>
           )}
         </div>
@@ -1639,10 +1806,10 @@ export default function ReaderInner() {
       {aiContextMenu && (
         <div
           style={{ position: 'fixed', top: aiContextMenu.y, left: aiContextMenu.x, zIndex: 9999 }}
-          className="bg-zinc-800 border border-zinc-700 rounded shadow-xl p-1"
+          className="rounded border border-[var(--panel-border)] bg-[var(--panel-bg)] p-1 shadow-xl"
         >
           <button
-            className="text-xs text-zinc-200 hover:bg-zinc-700 px-3 py-1.5 rounded block w-full text-left font-sans"
+            className="block w-full rounded px-3 py-1.5 text-left font-sans text-xs text-[var(--foreground)] hover:bg-[var(--input-bg)]"
             onClick={async (e) => {
               e.stopPropagation();
               const localNotes = JSON.parse(localStorage.getItem('my_reader_notes') || '[]');

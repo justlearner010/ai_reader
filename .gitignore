@@ -19,10 +19,13 @@
 
 # production
 /build
+/release
 
 # misc
 .DS_Store
 *.pem
+.codex/
+.codex-pet-runs/
 
 # debug
 npm-debug.log*

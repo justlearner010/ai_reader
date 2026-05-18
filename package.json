@@ -2,11 +2,17 @@
   "name": "ai_reader",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "desktop": "npm run desktop:dev",
+    "desktop:dev": "node scripts/desktop-dev.cjs",
+    "desktop:devtools": "AI_READER_DEVTOOLS=1 npm run desktop:dev",
+    "desktop:pack": "npm run build && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ electron-builder --mac --dir",
+    "desktop:dist": "npm run build && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ electron-builder --mac"
   },
   "dependencies": {
     "epubjs": "^0.3.93",
@@ -25,9 +31,40 @@
     "@types/prismjs": "^1.26.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "com.jay.aireader",
+    "productName": "AI Reader",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      ".next/**/*",
+      "!.next/dev/**/*",
+      "!.next/cache/**/*",
+      "electron/**/*",
+      "public/**/*",
+      "src/**/*",
+      "next.config.ts",
+      "package.json",
+      "package-lock.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "darkModeSupport": true
+    }
   }
 }
