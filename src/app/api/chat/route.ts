@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey || apiKey === "your_deepseek_api_key_here") {
       return Response.json(
-        { error: "请在 .env.local 中配置有效的 DEEPSEEK_API_KEY" },
+        { error: "请在本地 .env.local 或 Netlify 环境变量中配置有效的 DEEPSEEK_API_KEY" },
         { status: 500 },
       );
     }

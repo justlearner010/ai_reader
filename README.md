@@ -71,6 +71,38 @@ release/mac-arm64/AI Reader.app
 npm run desktop:dist
 ```
 
+## 部署到 Netlify
+
+建议把 AI Reader 作为独立 Netlify 站点部署，再从个人网站导航、作品页或按钮链接过去。不要把本项目作为静态目录直接塞进现有网站，因为它使用 Next.js App Router 和服务端 API 路由。
+
+Netlify 构建配置已写入 `netlify.toml`：
+
+```toml
+[build]
+  command = "npm run build"
+  publish = ".next"
+```
+
+在 Netlify 控制台创建新站点时，选择本仓库并确认：
+
+- Build command: `npm run build`
+- Publish directory: `.next`
+- Node version: `20`
+
+如果要使用内置 DeepSeek API 路由，在 Netlify 的 Site configuration -> Environment variables 中添加：
+
+```bash
+DEEPSEEK_API_KEY=your_api_key_here
+```
+
+部署完成后，可以在个人网站中添加一个入口链接到 Netlify 分配的域名，或给这个 Netlify 站点绑定子域名，例如：
+
+```text
+https://reader.your-domain.com
+```
+
+Web 部署版仍然是 local-first：导入的书籍、笔记、阅读进度和偏好保存在访问者当前浏览器的 IndexedDB / localStorage 中，不会自动同步到 Netlify 或你的个人网站服务器。
+
 ## 验证流程
 
 每次提交前至少运行：
@@ -95,11 +127,13 @@ npm run desktop:pack
 
 ## 环境变量
 
-如果使用服务端 DeepSeek API 路由，可在 `.env.local` 中配置：
+如果使用服务端 DeepSeek API 路由，本地开发可复制 `.env.example` 为 `.env.local` 后填写：
 
 ```bash
 DEEPSEEK_API_KEY=your_api_key_here
 ```
+
+Netlify 部署时，在 Netlify 环境变量中配置同名 `DEEPSEEK_API_KEY`。
 
 阅读器内也可以配置兼容 OpenAI Chat Completions API 的云端或本地模型服务。
 
