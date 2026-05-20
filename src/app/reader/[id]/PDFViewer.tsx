@@ -254,7 +254,7 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
         onSourceError={(error: Error) => console.error("🚨 PDF 数据源错误:", error.message)}
         options={pdfOptions}
         loading={<div className="py-20 text-center text-sm text-[var(--text-muted)]">正在渲染高清页面...</div>}
-        className="flex flex-col items-center py-8 gap-4"
+        className="flex flex-col items-center gap-5 py-8"
       >
         {numPages > 0 && Array.from({ length: numPages }, (_, i) => {
           const pageNum = i + 1;
@@ -267,7 +267,7 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
                     pageNumber={pageNum}
                     renderTextLayer={true}
                     renderAnnotationLayer={true}
-                    className="bg-white shadow-2xl"
+                    className="bg-white shadow-[0_12px_34px_rgba(0,0,0,0.24)]"
                     width={scaledWidth}
                   />
                 </PageCanvasGuard>

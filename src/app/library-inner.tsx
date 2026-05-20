@@ -18,14 +18,14 @@ import {
 const PDF_WORKER_URL = "/pdf.worker.min.mjs";
 
 const GRADIENT_COVERS = [
-  "from-blue-600 via-purple-600 to-pink-500",
-  "from-emerald-500 via-teal-500 to-cyan-600",
-  "from-orange-500 via-red-500 to-rose-600",
-  "from-indigo-500 via-violet-500 to-purple-600",
-  "from-amber-500 via-yellow-500 to-orange-600",
-  "from-rose-500 via-pink-500 to-fuchsia-500",
-  "from-sky-500 via-blue-500 to-indigo-600",
-  "from-lime-500 via-green-500 to-emerald-600",
+  "from-slate-700 via-slate-800 to-zinc-900",
+  "from-teal-900 via-slate-800 to-zinc-900",
+  "from-stone-700 via-zinc-800 to-neutral-950",
+  "from-indigo-900 via-slate-800 to-zinc-950",
+  "from-emerald-900 via-slate-800 to-neutral-950",
+  "from-zinc-700 via-stone-800 to-neutral-950",
+  "from-cyan-900 via-slate-800 to-zinc-950",
+  "from-neutral-700 via-zinc-800 to-stone-950",
 ];
 
 const SUPPORTED_EXTENSIONS = /\.(pdf|epub|txt)$/i;
@@ -514,19 +514,25 @@ export default function LibraryPage() {
         importFiles(e.dataTransfer.files);
       }}
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--panel-border)] px-8 py-5">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--panel-border)] bg-[var(--toolbar-bg)]/95 px-8 py-4">
         <div className="flex items-center gap-3">
-          <Library size={22} className="text-[var(--accent)]" />
-          <h1 className="text-lg font-semibold tracking-wide">我的图书馆</h1>
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg-elevated)] text-[var(--accent)]">
+            <Library size={18} />
+          </span>
+          <div>
+            <h1 className="text-base font-semibold">我的图书馆</h1>
+            <p className="text-xs text-[var(--text-muted)]">{books.length} 本书 · 本地优先保存</p>
+          </div>
         </div>
         <div className="min-w-[260px] flex-1 max-w-xl">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 transition-colors focus-within:border-[var(--accent)]">
+          <div className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 transition-colors focus-within:border-[var(--accent)] focus-within:ring-2 focus-within:ring-[var(--focus-ring)]">
             <Search size={15} className="text-[var(--text-muted)]" />
             <input
               ref={searchInputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜索书名、正文或笔记"
+              aria-label="搜索书名、正文或笔记"
               className="min-w-0 flex-1 bg-transparent text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-muted)]"
             />
           </div>
@@ -544,23 +550,25 @@ export default function LibraryPage() {
           <button
             onClick={handleBackupExport}
             disabled={isUploading || books.length === 0}
-            className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg-elevated)] px-3 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
             title="导出书库备份"
+            aria-label="导出书库备份"
           >
             <Download size={15} />
           </button>
           <button
             onClick={() => backupInputRef.current?.click()}
             disabled={isUploading}
-            className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg-elevated)] px-3 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
             title="恢复书库备份"
+            aria-label="恢复书库备份"
           >
             <ArchiveRestore size={15} />
           </button>
           <button
             onClick={handleUploadClick}
             disabled={isUploading}
-            className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-5 py-2 text-sm text-[var(--text-secondary)] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-[var(--accent)]/45 bg-[var(--accent)]/10 px-5 text-sm font-medium text-[var(--accent)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent)]/15 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
             {isUploading ? "解析中..." : "添加新书"}
@@ -570,15 +578,15 @@ export default function LibraryPage() {
 
       <div className="flex-1 overflow-y-auto px-8 py-8">
         {(importStatus || errorMessage) && (
-          <div className={`mb-5 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${errorMessage ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"}`}>
+          <div className={`mb-5 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${errorMessage ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]"}`}>
             {errorMessage ? <AlertCircle size={16} /> : <Loader2 size={16} className={isUploading ? "animate-spin" : ""} />}
             <span>{errorMessage || importStatus}</span>
           </div>
         )}
         {importQueue.length > 0 && (
-          <div className="mb-6 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg)]">
+          <div className="mb-6 overflow-hidden rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg)]">
             <div className="flex items-center justify-between border-b border-[var(--panel-border)] px-4 py-3">
-              <span className="text-xs font-medium text-[var(--text-muted)]">导入队列</span>
+              <span className="text-xs font-medium text-[var(--text-secondary)]">导入队列</span>
               <span className="text-xs text-[var(--text-muted)]">
                 {importQueue.filter((item) => item.status === "imported").length}/{importQueue.length}
               </span>
@@ -606,23 +614,27 @@ export default function LibraryPage() {
         )}
         {books.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-[var(--text-muted)]">
-            <BookOpen size={48} className="opacity-30" />
-            <p className="text-sm">书架空空如也，点击右上角添加你的第一本书，或直接拖拽文件到这里</p>
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg-elevated)]">
+              <BookOpen size={28} className="text-[var(--accent)]" />
+            </div>
+            <p className="max-w-md text-center text-sm">书架空空如也。添加 PDF、EPUB 或 TXT，也可以直接拖拽文件到这里。</p>
           </div>
         ) : filteredBooks.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-[var(--text-muted)]">
-            <Search size={42} className="opacity-30" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg-elevated)]">
+              <Search size={24} className="text-[var(--text-muted)]" />
+            </div>
             <p className="text-sm">没有找到匹配的书籍、正文或笔记</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {filteredBooks.map((book, i) => (
-              <div key={book.id} className={`group relative rounded-xl transition-shadow ${recentBookIds.has(book.id) ? "shadow-[0_0_0_2px_rgba(16,185,129,0.45)]" : ""}`}>
+              <div key={book.id} className={`group relative rounded-lg transition-shadow ${recentBookIds.has(book.id) ? "shadow-[0_0_0_2px_var(--accent)]" : ""}`}>
                 <button
                   onClick={() => router.push(`/reader/${book.id}`)}
-                  className="w-full cursor-pointer text-left transition-transform hover:-translate-y-1"
+                  className="w-full cursor-pointer text-left"
                 >
-                  <div className="relative mb-3 aspect-[3/4] w-full overflow-hidden rounded-xl shadow-lg transition-shadow group-hover:shadow-xl">
+                  <div className="relative mb-3 aspect-[3/4] w-full overflow-hidden rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg-elevated)] shadow-[var(--shadow-soft)] transition-colors group-hover:border-[var(--accent)]/55">
                     {book.coverImage ? (
                       <img
                         src={book.coverImage}
@@ -631,12 +643,12 @@ export default function LibraryPage() {
                       />
                     ) : (
                       <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${GRADIENT_COVERS[i % GRADIENT_COVERS.length]}`}>
-                        <span className="text-3xl font-bold tracking-wider text-white/30 select-none">
+                        <span className="text-3xl font-semibold text-white/35 select-none">
                           {book.title.slice(0, 2).toUpperCase()}
                         </span>
                       </div>
                     )}
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3 pt-8">
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-8">
                       <p className="truncate text-xs font-medium text-white/90">
                         {book.title}
                       </p>
@@ -650,9 +662,9 @@ export default function LibraryPage() {
                       {formatSize(book.size)} · {formatDate(book.uploadTime)}
                     </p>
                     <div className="flex items-center gap-2">
-                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--panel-border)]">
                         <div
-                          className="h-full rounded-full bg-emerald-500 transition-all"
+                          className="h-full rounded-full bg-[var(--accent)] transition-all"
                           style={{ width: `${book.readProgress}%` }}
                         />
                       </div>
@@ -664,8 +676,9 @@ export default function LibraryPage() {
                 </button>
                 <button
                   onClick={(e) => handleDelete(e, book.id)}
-                  className="absolute right-2 top-2 flex cursor-pointer items-center justify-center rounded-lg bg-black/40 p-1.5 text-white/60 opacity-0 transition-all hover:bg-red-500/60 hover:text-white group-hover:opacity-100"
+                  className="absolute right-2 top-2 flex min-h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-black/45 text-white/70 opacity-0 transition-colors hover:border-red-400/40 hover:bg-red-500/70 hover:text-white group-hover:opacity-100"
                   title="删除书籍"
+                  aria-label={`删除 ${book.title}`}
                 >
                   <Trash2 size={13} />
                 </button>
@@ -675,7 +688,7 @@ export default function LibraryPage() {
         )}
       </div>
       {dragActive && (
-        <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--accent)] bg-black/70 text-[var(--foreground)]">
+        <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-2xl border border-dashed border-[var(--accent)] bg-black/70 text-[var(--foreground)] backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3">
             <Upload size={34} className="text-[var(--accent)]" />
             <span className="text-sm">松开即可导入 PDF、EPUB 或 TXT</span>

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ePub from 'epubjs';
+import { ChevronLeft, ChevronRight, List, Loader2, PanelLeftClose } from 'lucide-react';
 
 interface EpubViewerProps {
   fileData: any;
@@ -31,17 +32,17 @@ type EpubThemeConfig = {
 
 const themeConfigs: Record<string, EpubThemeConfig> = {
   dark: {
-    bg: '#09090b',
-    pageBg: '#111113',
-    text: '#e4e4e7',
-    muted: '#a1a1aa',
-    secondary: '#d4d4d8',
-    accent: '#10b981',
-    selection: '#10b98133',
-    panelBorder: '#27272a',
-    tocBg: '#09090b',
-    tocActiveBg: '#18181b',
-    inputBg: '#18181b',
+    bg: '#0b0d10',
+    pageBg: '#111418',
+    text: '#e7e9ec',
+    muted: '#788392',
+    secondary: '#b8c0cc',
+    accent: '#7dd3c7',
+    selection: '#7dd3c733',
+    panelBorder: '#222831',
+    tocBg: '#0f1216',
+    tocActiveBg: '#182027',
+    inputBg: '#151a20',
   },
   sepia: {
     bg: '#f4ecd8',
@@ -540,12 +541,14 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
       >
         <button
           onClick={() => { setShowToc(!showToc); setTimeout(() => renditionRef.current?.resize(), 250); }}
-          className="border-b p-3 text-left text-sm font-bold transition-colors"
+          className="flex min-h-11 cursor-pointer items-center gap-2 border-b px-3 text-left text-xs font-medium transition-colors"
           style={{ borderColor: currentTheme.panelBorder, color: currentTheme.muted }}
           onMouseEnter={(e) => { e.currentTarget.style.color = currentTheme.text; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = currentTheme.muted; }}
+          aria-label={showToc ? "隐藏 EPUB 目录" : "显示 EPUB 目录"}
         >
-          {showToc ? "⬅️ 隐藏目录" : "📖 目录"}
+          {showToc ? <PanelLeftClose size={16} /> : <List size={16} />}
+          {showToc && <span>隐藏目录</span>}
         </button>
         {showToc && (
           <div className="flex-1 overflow-y-auto p-2 space-y-1 select-none">
@@ -556,7 +559,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
                   console.log("🚀 [TOC JUMP] 用户点击目录，狙击至:", item.href);
                   renditionRef.current?.display(item.href);
                 }}
-                className="w-full truncate rounded p-2 text-left font-sans text-xs transition-colors"
+                className="min-h-8 w-full truncate rounded-lg px-2 text-left font-sans text-xs transition-colors"
                 style={{ color: currentTheme.secondary }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = currentTheme.tocActiveBg;
@@ -576,24 +579,26 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
 
       <div className="relative flex-1 flex flex-col min-w-0">
         {isLoaded && (
-          <div className="absolute top-1/2 left-4 right-4 z-50 flex justify-between pointer-events-none -translate-y-1/2">
+          <div className="pointer-events-none absolute left-4 right-4 top-1/2 z-50 flex -translate-y-1/2 justify-between">
             <button
               onClick={() => renditionRef.current?.prev()}
-              className="pointer-events-auto rounded-full p-3 shadow-lg backdrop-blur-sm transition-all"
-              style={{ backgroundColor: currentTheme.inputBg, color: currentTheme.text }}
+              className="pointer-events-auto flex min-h-10 min-w-10 items-center justify-center rounded-full border shadow-[0_10px_24px_rgba(0,0,0,0.22)] backdrop-blur-sm transition-colors"
+              style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.panelBorder, color: currentTheme.text }}
               onMouseEnter={(e) => { e.currentTarget.style.color = currentTheme.accent; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = currentTheme.text; }}
+              aria-label="上一页"
             >
-              上页
+              <ChevronLeft size={18} />
             </button>
             <button
               onClick={() => renditionRef.current?.next()}
-              className="pointer-events-auto rounded-full p-3 shadow-lg backdrop-blur-sm transition-all"
-              style={{ backgroundColor: currentTheme.inputBg, color: currentTheme.text }}
+              className="pointer-events-auto flex min-h-10 min-w-10 items-center justify-center rounded-full border shadow-[0_10px_24px_rgba(0,0,0,0.22)] backdrop-blur-sm transition-colors"
+              style={{ backgroundColor: currentTheme.inputBg, borderColor: currentTheme.panelBorder, color: currentTheme.text }}
               onMouseEnter={(e) => { e.currentTarget.style.color = currentTheme.accent; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = currentTheme.text; }}
+              aria-label="下一页"
             >
-              下页
+              <ChevronRight size={18} />
             </button>
           </div>
         )}
@@ -601,8 +606,9 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
         <div ref={viewerRef} id="epub-area" className="flex-1 w-full h-full p-4" />
 
         {!isLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center font-medium" style={{ backgroundColor: currentTheme.bg, color: currentTheme.muted }}>
-            正在加载纯净阅读沙箱...
+          <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm font-medium" style={{ backgroundColor: currentTheme.bg, color: currentTheme.muted }}>
+            <Loader2 size={16} className="animate-spin" />
+            正在加载阅读沙箱...
           </div>
         )}
       </div>

@@ -2,27 +2,31 @@
 @import "katex/dist/katex.min.css";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #e8e8e8;
-  --panel-bg: #111111;
-  --panel-border: #1e1e1e;
-  --toolbar-bg: #111111;
-  --reader-bg: #0a0a0a;
-  --reader-page-bg: #111111;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --text-secondary: #888888;
-  --text-muted: #555555;
-  --chat-user-bg: #1a1a2e;
-  --chat-ai-bg: #1a1a1a;
-  --input-bg: #1a1a1a;
-  --input-border: #2a2a2a;
-  --note-bg: #1a1a1a;
-  --note-quote: #d4d4d8;
-  --note-body: #f4f4f5;
-  --toc-bg: #111111;
-  --toc-active-bg: #1a1a1a;
-  --scrollbar-thumb: #2a2a2a;
+  --background: #0b0d10;
+  --foreground: #e7e9ec;
+  --panel-bg: #111418;
+  --panel-bg-elevated: #151a20;
+  --panel-border: #222831;
+  --toolbar-bg: #0f1216;
+  --reader-bg: #0b0d10;
+  --reader-page-bg: #111418;
+  --accent: #7dd3c7;
+  --accent-hover: #5ec3b5;
+  --accent-contrast: #06201d;
+  --text-secondary: #b8c0cc;
+  --text-muted: #788392;
+  --chat-user-bg: #13201f;
+  --chat-ai-bg: #151a20;
+  --input-bg: #151a20;
+  --input-border: #29313b;
+  --note-bg: #151a20;
+  --note-quote: #cbd2dc;
+  --note-body: #f0f3f6;
+  --toc-bg: #0f1216;
+  --toc-active-bg: #182027;
+  --focus-ring: color-mix(in srgb, var(--accent) 58%, transparent);
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
+  --scrollbar-thumb: #303844;
   --scrollbar-track: transparent;
 }
 
@@ -37,6 +41,28 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+* {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+button,
+input,
+textarea,
+select,
+a {
+  outline-color: var(--focus-ring);
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .app-window-drag-region {
@@ -74,7 +100,18 @@ a,
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3a;
+  background: #46515f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .ai-message-content .ai-latex-block {

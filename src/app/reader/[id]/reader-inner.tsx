@@ -220,27 +220,28 @@ async function resolveOutlinePages(
 const READER_THEMES = {
   dark: {
     name: "深色",
-    bg: "#09090b",
-    text: "#e4e4e7",
+    bg: "#0b0d10",
+    text: "#e7e9ec",
     vars: {
-      "--reader-bg": "#09090b",
-      "--reader-page-bg": "#111113",
-      "--toolbar-bg": "#111113",
-      "--panel-bg": "#09090b",
-      "--panel-border": "#27272a",
-      "--text-muted": "#a1a1aa",
-      "--text-secondary": "#d4d4d8",
-      "--foreground": "#e4e4e7",
-      "--input-bg": "#18181b",
-      "--input-border": "#27272a",
-      "--accent": "#10b981",
-      "--chat-user-bg": "#18181b",
-      "--chat-ai-bg": "#18181b",
-      "--note-bg": "#18181b",
-      "--note-quote": "#d4d4d8",
-      "--note-body": "#f4f4f5",
-      "--toc-bg": "#09090b",
-      "--toc-active-bg": "#18181b",
+      "--reader-bg": "#0b0d10",
+      "--reader-page-bg": "#111418",
+      "--toolbar-bg": "#0f1216",
+      "--panel-bg": "#111418",
+      "--panel-border": "#222831",
+      "--text-muted": "#788392",
+      "--text-secondary": "#b8c0cc",
+      "--foreground": "#e7e9ec",
+      "--input-bg": "#151a20",
+      "--input-border": "#29313b",
+      "--accent": "#7dd3c7",
+      "--accent-contrast": "#06201d",
+      "--chat-user-bg": "#13201f",
+      "--chat-ai-bg": "#151a20",
+      "--note-bg": "#151a20",
+      "--note-quote": "#cbd2dc",
+      "--note-body": "#f0f3f6",
+      "--toc-bg": "#0f1216",
+      "--toc-active-bg": "#182027",
     },
   },
   sepia: {
@@ -259,6 +260,7 @@ const READER_THEMES = {
       "--input-bg": "#efe3c9",
       "--input-border": "#d4c9a8",
       "--accent": "#8b5e3c",
+      "--accent-contrast": "#fff7ed",
       "--chat-user-bg": "#efe3c9",
       "--chat-ai-bg": "#e8dcc4",
       "--note-bg": "#efe3c9",
@@ -284,6 +286,7 @@ const READER_THEMES = {
       "--input-bg": "#b8dcbb",
       "--input-border": "#8fbd96",
       "--accent": "#16803d",
+      "--accent-contrast": "#ecfdf5",
       "--chat-user-bg": "#b8dcbb",
       "--chat-ai-bg": "#a8d0ab",
       "--note-bg": "#b8dcbb",
@@ -309,6 +312,7 @@ const READER_THEMES = {
       "--input-bg": "#f4f4f5",
       "--input-border": "#d4d4d8",
       "--accent": "#0f766e",
+      "--accent-contrast": "#f0fdfa",
       "--chat-user-bg": "#f4f4f5",
       "--chat-ai-bg": "#eef7f4",
       "--note-bg": "#f4f4f5",
@@ -382,19 +386,19 @@ ${normalizedContext}
 
 const AI_IDENTITIES: Record<string, { name: string; prompt: string }> = {
   default: {
-    name: "💡 综合技术专家",
+    name: "综合技术专家",
     prompt: "你是一个一针见血的技术与文学专家，请用最简练、直击本质的话语为用户解释划词内容。"
   },
   coder: {
-    name: "💻 源码推演家",
+    name: "源码推演家",
     prompt: "你是一个精通 C++、Linux 内核和 AI Infra 的硬核架构师。请直接剖析用户划词背后的底层系统机制、内存堆栈变化或算法时空复杂度，多用代码块示例，拒绝废话。"
   },
   translator: {
-    name: "🔤 极简翻译官",
+    name: "极简翻译官",
     prompt: "你是一个同声传译专家。请直接给出用户划词最地道的中文翻译，并在下方列出 2-3 个最核心的专业词汇延伸解析，格式要极其紧凑。"
   },
   detective: {
-    name: "🔍 悬疑伏笔拆解手",
+    name: "悬疑伏笔拆解手",
     prompt: "你是一个深谙新本格派的悬疑小说家。请帮我严密分析用户划出这段话背后的文学隐喻、心理博弈或潜在的剧情伏笔。"
   },
 };
@@ -1497,8 +1501,8 @@ export default function ReaderInner() {
           style={{ backgroundColor: activeThemeVars["--toc-bg"], borderColor: activeThemeVars["--panel-border"] }}
         >
           <div className="flex items-center justify-between border-b border-[var(--panel-border)] px-4 py-3">
-            <span className="text-xs font-medium text-[var(--text-muted)]">目录</span>
-            <button onClick={() => setShowToc(false)} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:bg-white/5"><PanelRightClose size={14} /></button>
+            <span className="text-xs font-medium text-[var(--text-secondary)]">目录</span>
+            <button onClick={() => setShowToc(false)} className="flex min-h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--foreground)]" aria-label="关闭目录"><PanelRightClose size={14} /></button>
           </div>
           <div className="flex-1 overflow-y-auto py-2">
             {bookFormat === "pdf" && tocItems.map((item, i) => (
@@ -1511,16 +1515,16 @@ export default function ReaderInner() {
       )}
 
       <div className={`relative z-0 flex min-w-0 flex-col overflow-hidden ${bookFormat === "pdf" ? "" : fontFamily}`} style={{ width: leftPanelWidth, backgroundColor: "var(--reader-bg)" }}>
-        <div className="app-window-drag-region relative z-0 flex w-full min-w-0 flex-nowrap items-center gap-2 overflow-hidden border-b border-[var(--panel-border)] bg-[var(--toolbar-bg)] py-3 pl-28 pr-4">
-          <button onClick={() => router.push("/")} className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"><ArrowLeft size={14} />书架</button>
+        <div className="app-window-drag-region relative z-0 flex w-full min-w-0 flex-nowrap items-center gap-2 overflow-hidden border-b border-[var(--panel-border)] bg-[var(--toolbar-bg)]/95 py-2.5 pl-28 pr-4">
+          <button onClick={() => router.push("/")} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--accent)]"><ArrowLeft size={14} />书架</button>
           <input ref={fileInputRef} type="file" accept=".pdf,.epub,.txt" className="hidden" onChange={handleFileChange} />
-          <button onClick={handleUploadClick} className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><Upload size={14} />上传</button>
+          <button onClick={handleUploadClick} className="flex min-h-8 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><Upload size={14} />上传</button>
           {tocItems.length > 0 && (
-            <button onClick={() => setShowToc((v) => !v)} className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><List size={14} />目录</button>
+            <button onClick={() => setShowToc((v) => !v)} className="flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><List size={14} />目录</button>
           )}
-          <button onClick={handleDeleteBook} className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-red-500 hover:text-red-400"><Trash2 size={14} />删除</button>
+          <button onClick={handleDeleteBook} className="flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--text-secondary)] transition-colors hover:border-red-500 hover:text-red-400"><Trash2 size={14} />删除</button>
           {bookFormat !== "pdf" && (
-            <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value as ReaderFontKey)} className="shrink-0 cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-2 py-1.5 text-xs text-[var(--text-secondary)] outline-none transition-colors hover:border-[var(--accent)]">
+            <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value as ReaderFontKey)} className="min-h-8 shrink-0 cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-2 text-xs text-[var(--text-secondary)] outline-none transition-colors hover:border-[var(--accent)]">
               {READER_FONT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
@@ -1531,45 +1535,46 @@ export default function ReaderInner() {
               <button
                 key={key}
                 onClick={() => handleThemeChange(key)}
-                className="h-5 w-5 cursor-pointer rounded-full border-2 transition-all"
+                className="h-6 w-6 cursor-pointer rounded-full border transition-all"
                 style={{
                   backgroundColor: READER_THEMES[key].bg,
                   borderColor: theme === key ? "var(--accent)" : "transparent",
-                  transform: theme === key ? "scale(1.1)" : "scale(1)",
+                  boxShadow: theme === key ? "0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent)" : "none",
                 }}
                 title={READER_THEMES[key].name}
+                aria-label={`切换到${READER_THEMES[key].name}主题`}
               />
             ))}
           </div>
 
           {bookFormat === "pdf" ? (
-            <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
-              <button onClick={() => changePdfZoom(-0.1)} className="flex cursor-pointer items-center rounded px-1.5 py-1 transition-colors hover:text-[var(--foreground)]" title="缩小页面"><ZoomOut size={14} /></button>
+            <div className="flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-1 text-xs text-[var(--text-muted)]">
+              <button onClick={() => changePdfZoom(-0.1)} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-[var(--toc-active-bg)] hover:text-[var(--foreground)]" title="缩小页面" aria-label="缩小页面"><ZoomOut size={14} /></button>
               <span className="w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
-              <button onClick={() => changePdfZoom(0.1)} className="flex cursor-pointer items-center rounded px-1.5 py-1 transition-colors hover:text-[var(--foreground)]" title="放大页面"><ZoomIn size={14} /></button>
+              <button onClick={() => changePdfZoom(0.1)} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-[var(--toc-active-bg)] hover:text-[var(--foreground)]" title="放大页面" aria-label="放大页面"><ZoomIn size={14} /></button>
             </div>
           ) : (
-            <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
-              <button onClick={() => changeFontSize(-2)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="缩小字号">A-</button>
+            <div className="flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-1 text-xs text-[var(--text-muted)]">
+              <button onClick={() => changeFontSize(-2)} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md font-bold transition-colors hover:bg-[var(--toc-active-bg)] hover:text-[var(--foreground)]" title="缩小字号" aria-label="缩小字号">A-</button>
               <span className="w-8 text-center tabular-nums">{fontSize}px</span>
-              <button onClick={() => changeFontSize(2)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="放大字号">A+</button>
+              <button onClick={() => changeFontSize(2)} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md font-bold transition-colors hover:bg-[var(--toc-active-bg)] hover:text-[var(--foreground)]" title="放大字号" aria-label="放大字号">A+</button>
             </div>
           )}
 
           {bookFormat === "epub" && (
-            <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
+            <div className="flex min-h-8 shrink-0 items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-2 text-xs text-[var(--text-muted)]">
               <span className="text-[11px]">词距</span>
-              <button onClick={() => changeEpubWordSpacing(-1)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="缩小词间距">W-</button>
+              <button onClick={() => changeEpubWordSpacing(-1)} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md font-bold transition-colors hover:bg-[var(--toc-active-bg)] hover:text-[var(--foreground)]" title="缩小词间距" aria-label="缩小词间距">W-</button>
               <span className="w-8 text-center tabular-nums">{epubWordSpacing}px</span>
-              <button onClick={() => changeEpubWordSpacing(1)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="增大词间距">W+</button>
+              <button onClick={() => changeEpubWordSpacing(1)} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md font-bold transition-colors hover:bg-[var(--toc-active-bg)] hover:text-[var(--foreground)]" title="增大词间距" aria-label="增大词间距">W+</button>
             </div>
           )}
 
-          <button onClick={() => setShowSettings(true)} className="flex shrink-0 cursor-pointer items-center rounded-lg px-2 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]" title="AI 设置"><Settings size={14} /></button>
+          <button onClick={() => setShowSettings(true)} className="flex min-h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--accent)]" title="AI 设置" aria-label="AI 设置"><Settings size={14} /></button>
 
           {bookFormat === "pdf" && totalPages > 0 && (
             <div className="ml-auto flex min-w-0 shrink items-center justify-end gap-2 overflow-hidden text-xs text-[var(--text-muted)]">
-              <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} className="cursor-pointer rounded p-0.5 transition-colors hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-30"><ChevronLeft size={14} /></button>
+              <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-30" aria-label="上一页"><ChevronLeft size={14} /></button>
               <input
                 value={pageInput}
                 onChange={(e) => setPageInput(e.target.value)}
@@ -1583,15 +1588,16 @@ export default function ReaderInner() {
                   }
                 }}
                 onBlur={() => setPageInput(String(currentPage))}
-                className="w-8 bg-transparent text-center text-xs text-[var(--text-muted)] outline-none focus:text-[var(--foreground)]"
+                aria-label="当前页码"
+                className="w-9 rounded-md border border-transparent bg-transparent text-center text-xs text-[var(--text-muted)] outline-none transition-colors focus:border-[var(--input-border)] focus:text-[var(--foreground)]"
               />
               <span className="text-xs text-[var(--text-muted)]">/ {totalPages}</span>
-              <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages} className="cursor-pointer rounded p-0.5 transition-colors hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-30"><ChevronRight size={14} /></button>
+              <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-30" aria-label="下一页"><ChevronRight size={14} /></button>
             </div>
           )}
 
           <div className="flex min-w-0 shrink items-center gap-1.5 text-xs text-[var(--text-muted)]" style={{ marginLeft: bookFormat === "pdf" && totalPages > 0 ? "12px" : "auto" }}><BookOpen size={12} className="shrink-0" /><span className="max-w-28 truncate">{bookTitle}</span></div>
-          <button onClick={() => setIsSidebarOpen((prev) => !prev)} className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]" title={isSidebarOpen ? "收起侧边栏 (Ctrl+B)" : "展开侧边栏 (Ctrl+B)"}>{isSidebarOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}</button>
+          <button onClick={() => setIsSidebarOpen((prev) => !prev)} className="flex min-h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--accent)]" title={isSidebarOpen ? "收起侧边栏 (Ctrl+B)" : "展开侧边栏 (Ctrl+B)"} aria-label={isSidebarOpen ? "收起侧边栏" : "展开侧边栏"}>{isSidebarOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}</button>
         </div>
 
         {totalPages > 0 && (
@@ -1662,9 +1668,9 @@ export default function ReaderInner() {
         className="relative z-10 flex min-w-0 flex-col overflow-hidden bg-[var(--panel-bg)] text-[var(--foreground)]"
         style={{ width: rightPanelWidth, backgroundColor: activeThemeVars["--panel-bg"] }}
       >
-        <div className="flex border-b border-[var(--panel-border)]">
-          <button onClick={() => setSidebarTab("chat")} className={`flex cursor-pointer items-center gap-1.5 px-5 py-2.5 text-xs font-medium transition-colors ${sidebarTab === "chat" ? "border-b-2 border-[var(--accent)] text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--foreground)]"}`}><Bot size={14} />AI 助理</button>
-          <button onClick={() => setSidebarTab("notes")} className={`flex cursor-pointer items-center gap-1.5 px-5 py-2.5 text-xs font-medium transition-colors ${sidebarTab === "notes" ? "border-b-2 border-[var(--accent)] text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--foreground)]"}`}><StickyNote size={14} />图书笔记{notes.length > 0 ? <span className="ml-0.5 rounded-full bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] text-[var(--accent)]">{notes.length}</span> : null}</button>
+        <div className="flex gap-1 border-b border-[var(--panel-border)] bg-[var(--toolbar-bg)]/80 p-2">
+          <button onClick={() => setSidebarTab("chat")} className={`flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-colors ${sidebarTab === "chat" ? "bg-[var(--accent)]/12 text-[var(--accent)]" : "text-[var(--text-muted)] hover:bg-[var(--input-bg)] hover:text-[var(--foreground)]"}`}><Bot size={14} />AI 助理</button>
+          <button onClick={() => setSidebarTab("notes")} className={`flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-colors ${sidebarTab === "notes" ? "bg-[var(--accent)]/12 text-[var(--accent)]" : "text-[var(--text-muted)] hover:bg-[var(--input-bg)] hover:text-[var(--foreground)]"}`}><StickyNote size={14} />图书笔记{notes.length > 0 ? <span className="ml-0.5 rounded-full bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] text-[var(--accent)]">{notes.length}</span> : null}</button>
         </div>
 
         {sidebarTab === "chat" && (
@@ -1672,21 +1678,21 @@ export default function ReaderInner() {
             <div className="flex items-center justify-between border-b border-[var(--panel-border)] px-5 py-3">
               <div className="flex items-center gap-2"><Bot size={16} className="text-[var(--accent)]" /><span className="text-sm font-medium">AI 读书助理</span></div>
               <div className="flex items-center gap-1">
-                <button onClick={() => setShowConfig((v) => !v)} className={`flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs transition-colors ${showConfig ? 'text-[var(--accent)] bg-[var(--accent)]/10' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`} title="AI 提供商配置"><Settings size={13} />配置</button>
-                <button onClick={handleClearChat} className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs text-[var(--text-muted)] transition-colors hover:text-red-400" title="清空当前对话"><Trash2 size={13} />清空</button>
+                <button onClick={() => setShowConfig((v) => !v)} className={`flex min-h-8 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs transition-colors ${showConfig ? 'bg-[var(--accent)]/10 text-[var(--accent)]' : 'text-[var(--text-muted)] hover:bg-[var(--input-bg)] hover:text-[var(--foreground)]'}`} title="AI 提供商配置"><Settings size={13} />配置</button>
+                <button onClick={handleClearChat} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400" title="清空当前对话"><Trash2 size={13} />清空</button>
               </div>
             </div>
             <div className="border-b border-[var(--panel-border)] px-5 py-2">
-              <div className="flex items-center gap-2 rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-1.5 transition-colors focus-within:border-[var(--accent)]">
-                <input ref={searchInputRef} type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleVocabularySearch(); } }} placeholder="查询词汇/术语（如：虚拟内存）" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--text-muted)]" />
-                <button onClick={handleVocabularySearch} className="flex cursor-pointer items-center justify-center rounded p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"><Search size={13} /></button>
+              <div className="flex min-h-9 items-center gap-2 rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 transition-colors focus-within:border-[var(--accent)] focus-within:ring-2 focus-within:ring-[var(--focus-ring)]">
+                <input ref={searchInputRef} type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleVocabularySearch(); } }} placeholder="查询词汇/术语（如：虚拟内存）" aria-label="查询词汇或术语" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--text-muted)]" />
+                <button onClick={handleVocabularySearch} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--toc-active-bg)] hover:text-[var(--accent)]" aria-label="查询词汇"><Search size={13} /></button>
               </div>
             </div>
             {showConfig && (
               <div className="border-b border-[var(--panel-border)] px-5 py-3 space-y-3">
                 <div className="flex items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] p-0.5">
-                  <button onClick={() => setApiConfig((prev) => ({ ...prev, engineMode: 'cloud' }))} className={`flex-1 cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${apiConfig.engineMode === 'cloud' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`}>☁️ 云端</button>
-                  <button onClick={() => setApiConfig((prev) => ({ ...prev, engineMode: 'local' }))} className={`flex-1 cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${apiConfig.engineMode === 'local' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`}>💻 本地</button>
+                  <button onClick={() => setApiConfig((prev) => ({ ...prev, engineMode: 'cloud' }))} className={`min-h-8 flex-1 cursor-pointer rounded-md px-2 text-[11px] font-medium transition-colors ${apiConfig.engineMode === 'cloud' ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`}>云端</button>
+                  <button onClick={() => setApiConfig((prev) => ({ ...prev, engineMode: 'local' }))} className={`min-h-8 flex-1 cursor-pointer rounded-md px-2 text-[11px] font-medium transition-colors ${apiConfig.engineMode === 'local' ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`}>本地</button>
                 </div>
                 <div className="flex items-center justify-between px-1">
                   <label className="text-[11px] text-[var(--text-muted)]">Temperature</label>
@@ -1710,7 +1716,7 @@ export default function ReaderInner() {
                     setIdentityId(id);
                     setUserPrompt(AI_IDENTITIES[id].prompt);
                   }}
-                  className="w-full cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                  className="min-h-9 w-full cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                 >
                   {Object.entries(AI_IDENTITIES).map(([key, preset]) => (
                     <option key={key} value={key}>{preset.name}</option>
@@ -1728,7 +1734,7 @@ export default function ReaderInner() {
                     <select
                       value={apiConfig.cloud.currentProvider}
                       onChange={(e) => setApiConfig((prev) => ({ ...prev, cloud: { ...prev.cloud, currentProvider: e.target.value } }))}
-                      className="w-full cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                      className="min-h-9 w-full cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                     >
                       {Object.entries(PROVIDER_PRESETS).map(([key, preset]) => (
                         <option key={key} value={key}>{preset.name}</option>
@@ -1745,7 +1751,7 @@ export default function ReaderInner() {
                         },
                       }))}
                       placeholder={`输入 ${PROVIDER_PRESETS[apiConfig.cloud.currentProvider]?.name || ''} API Key`}
-                      className="w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                      className="min-h-9 w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                     />
                     {apiConfig.cloud.currentProvider === 'custom' && (
                       <>
@@ -1754,14 +1760,14 @@ export default function ReaderInner() {
                           value={apiConfig.cloud.customUrl}
                           onChange={(e) => setApiConfig((prev) => ({ ...prev, cloud: { ...prev.cloud, customUrl: e.target.value } }))}
                           placeholder="自定义 API 地址 (如 https://your-proxy.com/v1)"
-                          className="w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                          className="min-h-9 w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                         />
                         <input
                           type="text"
                           value={apiConfig.cloud.customModel}
                           onChange={(e) => setApiConfig((prev) => ({ ...prev, cloud: { ...prev.cloud, customModel: e.target.value } }))}
                           placeholder="自定义模型名称"
-                          className="w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                          className="min-h-9 w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                         />
                       </>
                     )}
@@ -1774,29 +1780,29 @@ export default function ReaderInner() {
                       value={apiConfig.local.url}
                       onChange={(e) => setApiConfig((prev) => ({ ...prev, local: { ...prev.local, url: e.target.value } }))}
                       placeholder="Ollama 地址"
-                      className="w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                      className="min-h-9 w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                     />
                     <input
                       type="text"
                       value={apiConfig.local.model}
                       onChange={(e) => setApiConfig((prev) => ({ ...prev, local: { ...prev.local, model: e.target.value } }))}
                       placeholder="本地模型名称"
-                      className="w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                      className="min-h-9 w-full rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                     />
                   </>
                 )}
               </div>
             )}
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
-              {messages.length === 0 && <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--text-muted)]"><Bot size={24} className="opacity-30" /><p className="text-xs">开始提问，AI 将基于当前页面内容回答</p></div>}
+              {messages.length === 0 && <div className="flex h-full flex-col items-center justify-center gap-3 text-[var(--text-muted)]"><div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]"><Bot size={22} className="text-[var(--accent)]" /></div><p className="text-xs">开始提问，AI 将基于当前页面内容回答</p></div>}
               {messages.filter(msg => msg.role !== 'system').map((msg, i) => (
                 <div key={i} className="flex gap-3">
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${msg.role === "user" ? "bg-[var(--chat-user-bg)] text-[var(--accent)]" : "bg-[var(--chat-ai-bg)] text-[var(--accent)]"}`}>
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--panel-border)] ${msg.role === "user" ? "bg-[var(--chat-user-bg)] text-[var(--accent)]" : "bg-[var(--chat-ai-bg)] text-[var(--accent)]"}`}>
                     {msg.role === "user" ? <User size={15} /> : <Bot size={15} />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 text-[13px] font-medium text-[var(--text-muted)]">{msg.role === "user" ? "你" : "AI 助理"}</div>
-                    <div className={`rounded-2xl px-4 py-3 text-lg leading-relaxed ${msg.role === "user" ? "bg-[var(--chat-user-bg)]" : "bg-[var(--chat-ai-bg)]"} text-[var(--foreground)]`}>
+                    <div className={`rounded-xl border border-[var(--panel-border)] px-4 py-3 text-lg leading-relaxed ${msg.role === "user" ? "bg-[var(--chat-user-bg)]" : "bg-[var(--chat-ai-bg)]"} text-[var(--foreground)]`}>
                       {msg.parsed ? (
                         <div className="space-y-2">
                           <div className="flex items-center gap-2"><span className="rounded bg-[var(--accent)]/20 px-2 py-0.5 text-xs font-bold text-[var(--accent)]">{msg.parsed.term}</span></div>
@@ -1813,10 +1819,10 @@ export default function ReaderInner() {
               ))}
               <div ref={chatEndRef} />
             </div>
-            <div className="border-t border-[var(--panel-border)] px-5 py-4">
-              <div className="flex items-center gap-2 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-2.5 transition-colors focus-within:border-[var(--accent)]">
-                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="输入你的问题..." disabled={isStreaming} className="min-w-0 flex-1 bg-transparent text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-muted)] disabled:opacity-50" />
-                <button onClick={handleSend} disabled={isStreaming || !input.trim()} className="flex cursor-pointer items-center justify-center rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <div className="border-t border-[var(--panel-border)] bg-[var(--toolbar-bg)]/60 px-5 py-4">
+              <div className="flex min-h-11 items-center gap-2 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 transition-colors focus-within:border-[var(--accent)] focus-within:ring-2 focus-within:ring-[var(--focus-ring)]">
+                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="输入你的问题..." disabled={isStreaming} aria-label="输入你的问题" className="min-w-0 flex-1 bg-transparent text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--text-muted)] disabled:opacity-50" />
+                <button onClick={handleSend} disabled={isStreaming || !input.trim()} className="flex min-h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-contrast)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="发送问题">
                   {isStreaming ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                 </button>
               </div>
@@ -1836,21 +1842,21 @@ export default function ReaderInner() {
               <div className="mb-4 rounded-xl border border-[var(--accent)]/30 bg-[var(--note-bg)] p-4">
                 <div className="mb-2 flex items-center gap-2"><StickyNote size={14} className="text-[var(--accent)]" /><span className="text-xs font-medium text-[var(--accent)]">{editingNote.isEditing ? "编辑笔记" : "新建笔记"}</span></div>
                 <p className="mb-2 border-l-2 border-[var(--accent)]/40 pl-2 text-sm italic leading-relaxed text-[var(--note-quote)]">“{editingNote.quote}”</p>
-                <textarea value={editingNote.content} onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })} placeholder="写下你的想法..." className="mb-3 min-h-[80px] w-full resize-none rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] p-3 text-[15px] leading-7 text-[var(--note-body)] outline-none placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--accent)]" />
+                <textarea value={editingNote.content} onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })} placeholder="写下你的想法..." aria-label="笔记内容" className="mb-3 min-h-[80px] w-full resize-none rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] p-3 text-[15px] leading-7 text-[var(--note-body)] outline-none placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--accent)]" />
                 <div className="flex items-center justify-end gap-2">
                   <button onClick={() => setEditingNote(null)} className="cursor-pointer rounded-lg px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--foreground)]">取消</button>
-                  <button onClick={handleSaveEditingNote} className="flex cursor-pointer items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs text-white transition-opacity hover:opacity-90"><Bookmark size={12} />{editingNote.isEditing ? "更新笔记" : "保存笔记"}</button>
+                  <button onClick={handleSaveEditingNote} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-contrast)] transition-opacity hover:opacity-90"><Bookmark size={12} />{editingNote.isEditing ? "更新笔记" : "保存笔记"}</button>
                 </div>
               </div>
             )}
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-medium text-[var(--text-muted)]">共 {notes.length} 条笔记</span>
               {notes.length > 0 && (
-                <button onClick={handleExportObsidian} className="flex cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] px-2.5 py-1 text-[10px] text-[var(--text-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><Download size={11} />导出到 Obsidian</button>
+                <button onClick={handleExportObsidian} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] px-2.5 text-[10px] text-[var(--text-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><Download size={11} />导出到 Obsidian</button>
               )}
             </div>
             {notes.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--text-muted)]"><StickyNote size={24} className="opacity-30" /><p className="text-xs">暂无笔记</p><p className="text-[10px] text-[var(--text-muted)]/50">划词后点击「添加笔记」按钮</p></div>
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--text-muted)]"><div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]"><StickyNote size={20} className="text-[var(--accent)]" /></div><p className="text-xs">暂无笔记</p><p className="text-[10px] text-[var(--text-muted)]/70">划词后点击「添加笔记」按钮</p></div>
             ) : (
               <div className="space-y-3">
                 {[...notes].reverse().map((note) => (
@@ -1861,8 +1867,8 @@ export default function ReaderInner() {
                         {note.chapter && <span className="text-[10px] text-[var(--text-muted)]">| {note.chapter}</span>}
                       </span>
                       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button onClick={(e) => { e.stopPropagation(); handleEditNote(note); }} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"><Edit size={12} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); deleteNote(bookId!, note.id).then(setNotes); }} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:text-red-400"><Trash2 size={12} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleEditNote(note); }} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--accent)]" aria-label="编辑笔记"><Edit size={12} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteNote(bookId!, note.id).then(setNotes); }} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400" aria-label="删除笔记"><Trash2 size={12} /></button>
                       </div>
                     </div>
                     <p className="mb-3 border-l-2 border-[var(--accent)]/50 pl-3 text-sm leading-relaxed text-[var(--note-quote)]">“{note.quote}”</p>
@@ -1877,16 +1883,16 @@ export default function ReaderInner() {
       )}
 
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowSettings(false)}>
-          <div className="w-full max-w-md rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm" onClick={() => setShowSettings(false)}>
+          <div className="w-full max-w-md rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-6 shadow-[var(--shadow-soft)]" onClick={(e) => e.stopPropagation()}>
             <div className="mb-5 flex items-center justify-between">
               <span className="text-sm font-medium text-[var(--foreground)]">AI 引擎配置</span>
-              <button onClick={() => setShowSettings(false)} className="cursor-pointer rounded p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--foreground)]"><Settings size={16} /></button>
+              <button onClick={() => setShowSettings(false)} className="flex min-h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--foreground)]" aria-label="关闭 AI 引擎配置"><Settings size={16} /></button>
             </div>
 
             <div className="mb-5 flex rounded-lg border border-[var(--panel-border)] p-0.5">
-              <button onClick={() => setApiConfig((prev) => ({ ...prev, engineMode: 'cloud' }))} className={`flex-1 cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${apiConfig.engineMode === 'cloud' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`}>☁️ 云端大模型</button>
-              <button onClick={() => setApiConfig((prev) => ({ ...prev, engineMode: 'local' }))} className={`flex-1 cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${apiConfig.engineMode === 'local' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`}>💻 本地算力 (Ollama)</button>
+              <button onClick={() => setApiConfig((prev) => ({ ...prev, engineMode: 'cloud' }))} className={`min-h-9 flex-1 cursor-pointer rounded-md px-3 text-xs font-medium transition-colors ${apiConfig.engineMode === 'cloud' ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`}>云端大模型</button>
+              <button onClick={() => setApiConfig((prev) => ({ ...prev, engineMode: 'local' }))} className={`min-h-9 flex-1 cursor-pointer rounded-md px-3 text-xs font-medium transition-colors ${apiConfig.engineMode === 'local' ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'}`}>本地算力</button>
             </div>
 
             <div className="space-y-3">
@@ -1896,7 +1902,7 @@ export default function ReaderInner() {
                   <select
                     value={apiConfig.cloud.currentProvider}
                     onChange={(e) => setApiConfig((prev) => ({ ...prev, cloud: { ...prev.cloud, currentProvider: e.target.value } }))}
-                    className="w-full cursor-pointer rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                    className="min-h-10 w-full cursor-pointer rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                   >
                     {Object.entries(PROVIDER_PRESETS).map(([key, preset]) => (
                       <option key={key} value={key}>{preset.name}</option>
@@ -1913,7 +1919,7 @@ export default function ReaderInner() {
                     ? { ...prev, cloud: { ...prev.cloud, customUrl: e.target.value } }
                     : { ...prev, local: { ...prev.local, url: e.target.value } })}
                   placeholder={apiConfig.engineMode === 'cloud' ? PROVIDER_PRESETS[apiConfig.cloud.currentProvider]?.url : "http://localhost:11434/v1"}
-                  className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                  className="min-h-10 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                 />
               </div>
 
@@ -1930,7 +1936,7 @@ export default function ReaderInner() {
                         keys: { ...prev.cloud.keys, [prev.cloud.currentProvider]: e.target.value },
                       },
                     }))}
-                    className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                    className="min-h-10 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                   />
                 </div>
               )}
@@ -1944,7 +1950,7 @@ export default function ReaderInner() {
                     ? { ...prev, cloud: { ...prev.cloud, customModel: e.target.value } }
                     : { ...prev, local: { ...prev.local, model: e.target.value } })}
                   placeholder={apiConfig.engineMode === 'cloud' ? PROVIDER_PRESETS[apiConfig.cloud.currentProvider]?.model : "qwen2.5"}
-                  className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
+                  className="min-h-10 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
                 />
               </div>
 
@@ -1957,24 +1963,24 @@ export default function ReaderInner() {
       )}
 
       {contextMenu && (
-        <div className="context-menu fixed z-50 min-w-36 rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] py-1 shadow-2xl" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <button onClick={handleExplainSelection} className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--input-bg)]"><Bot size={14} className="text-[var(--accent)]" />AI 解释</button>
-          <button onClick={handleTranslate} className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--input-bg)]"><BookOpen size={14} className="text-[var(--accent)]" />AI 翻译</button>
+        <div className="context-menu fixed z-50 min-w-36 rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-1 shadow-[var(--shadow-soft)]" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button onClick={handleExplainSelection} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-3 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--input-bg)]"><Bot size={14} className="text-[var(--accent)]" />AI 解释</button>
+          <button onClick={handleTranslate} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-3 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--input-bg)]"><BookOpen size={14} className="text-[var(--accent)]" />AI 翻译</button>
         </div>
       )}
 
       {translatePopover && translatePopover.isCode ? (
-        <div ref={translatePopoverRef} className="translate-popover fixed z-50 -translate-x-1/2 rounded-lg border border-[var(--panel-border)] shadow-2xl" style={{ left: translatePopover.x, top: translatePopover.y, maxWidth: 500, minWidth: 260 }}>
+        <div ref={translatePopoverRef} className="translate-popover fixed z-50 -translate-x-1/2 rounded-lg border border-[var(--panel-border)] shadow-[var(--shadow-soft)]" style={{ left: translatePopover.x, top: translatePopover.y, maxWidth: 500, minWidth: 260 }}>
           <div className="flex items-center justify-between rounded-t-lg border-b border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5">
-            <span className="text-[10px] text-white/40 font-mono tracking-wider">C</span>
-            <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(translatePopover.word).then(() => setCopied(true)); setTimeout(() => setCopied(false), 1500); }} className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-white/40 transition-colors hover:text-white/80"><Copy size={11} />{copied ? "Copied!" : "Copy"}</button>
+            <span className="font-mono text-[10px] text-[var(--text-muted)]">CODE</span>
+            <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(translatePopover.word).then(() => setCopied(true)); setTimeout(() => setCopied(false), 1500); }} className="flex min-h-7 cursor-pointer items-center gap-1 rounded px-1.5 text-[10px] text-[var(--text-muted)] transition-colors hover:bg-[var(--toc-active-bg)] hover:text-[var(--foreground)]"><Copy size={11} />{copied ? "Copied" : "Copy"}</button>
           </div>
           <pre className="m-0 overflow-x-auto rounded-b-lg bg-[var(--input-bg)] p-0">
             <code className="block p-4 font-mono text-[13px] leading-[1.6] text-[var(--foreground)]">{translatePopover.word}</code>
           </pre>
         </div>
       ) : translatePopover && (
-        <div ref={translatePopoverRef} className="translate-popover fixed z-50 w-auto min-w-24 max-w-64 -translate-x-1/2 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg)] px-3 py-2 shadow-2xl" style={{ left: translatePopover.x, top: translatePopover.y }}>
+        <div ref={translatePopoverRef} className="translate-popover fixed z-50 w-auto min-w-24 max-w-64 -translate-x-1/2 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg)] px-3 py-2 shadow-[var(--shadow-soft)]" style={{ left: translatePopover.x, top: translatePopover.y }}>
           {translatePopover.loading ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)]"><Loader2 size={12} className="animate-spin" />翻译中...</span>
           ) : (
@@ -1984,8 +1990,8 @@ export default function ReaderInner() {
               ) : (
                 <span className="whitespace-pre-wrap text-xs text-[var(--text-muted)]">{translatePopover.word}</span>
               )}
-              <button onClick={(e) => { e.stopPropagation(); handlePopoverExplain(); }} className="flex cursor-pointer items-center gap-1 rounded bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20"><Bot size={11} />AI 解释</button>
-              <button onClick={(e) => { e.stopPropagation(); handleStartNote(); }} className="flex cursor-pointer items-center gap-1 rounded bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20"><StickyNote size={11} />添加笔记</button>
+              <button onClick={(e) => { e.stopPropagation(); handlePopoverExplain(); }} className="flex min-h-7 cursor-pointer items-center gap-1 rounded-lg bg-[var(--accent)]/10 px-2 text-xs text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20"><Bot size={11} />AI 解释</button>
+              <button onClick={(e) => { e.stopPropagation(); handleStartNote(); }} className="flex min-h-7 cursor-pointer items-center gap-1 rounded-lg bg-[var(--accent)]/10 px-2 text-xs text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20"><StickyNote size={11} />添加笔记</button>
             </div>
           )}
         </div>
@@ -1993,10 +1999,10 @@ export default function ReaderInner() {
       {aiContextMenu && (
         <div
           style={{ position: 'fixed', top: aiContextMenu.y, left: aiContextMenu.x, zIndex: 9999 }}
-          className="rounded border border-[var(--panel-border)] bg-[var(--panel-bg)] p-1 shadow-xl"
+          className="rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg)] p-1 shadow-[var(--shadow-soft)]"
         >
           <button
-            className="block w-full rounded px-3 py-1.5 text-left font-sans text-xs text-[var(--foreground)] hover:bg-[var(--input-bg)]"
+            className="block min-h-8 w-full rounded-md px-3 text-left font-sans text-xs text-[var(--foreground)] hover:bg-[var(--input-bg)]"
             onClick={async (e) => {
               e.stopPropagation();
               const localNotes = JSON.parse(localStorage.getItem('my_reader_notes') || '[]');
