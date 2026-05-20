@@ -11,12 +11,11 @@ export interface PDFViewerHandle {
 interface PDFViewerProps {
   pdfData: ArrayBuffer;
   zoom: number;
+  currentPage: number;
   onLoadSuccess: (pdf: { numPages: number }) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onPageChange: (page: number) => void;
   onTextSelect?: (text: string, centerX: number, rectTop: number, rectBottom: number) => void;
-  onActivePageChange?: (page: number) => void;
-  fontFamily?: string;
   initialProgress?: number;
 }
 
@@ -40,12 +39,11 @@ function PageCanvasGuard({ children }: { children: React.ReactNode }) {
 const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
   pdfData,
   zoom,
+  currentPage,
   onLoadSuccess,
   onContextMenu,
   onPageChange,
   onTextSelect,
-  onActivePageChange,
-  fontFamily = "font-sans",
   initialProgress,
 }, ref) => {
   const [ready, setReady] = useState(false);
@@ -59,16 +57,13 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
   const containerRef = useRef<HTMLDivElement>(null);
   const onPageChangeRef = useRef(onPageChange);
   const onTextSelectRef = useRef(onTextSelect);
-  const onActivePageChangeRef = useRef(onActivePageChange);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const visibleRatios = useRef(new Map<string, number>());
   const debounceTimer = useRef(0);
   const isRestoringRef = useRef(true);
   const isJumpingRef = useRef(false);
+  const lastZoomRef = useRef(zoom);
 
   onPageChangeRef.current = onPageChange;
   onTextSelectRef.current = onTextSelect;
-  onActivePageChangeRef.current = onActivePageChange;
 
   const pdfFile = useMemo(() => ({ data: pdfData }), [pdfData]);
   const pdfOptions = useMemo(() => ({
@@ -80,6 +75,22 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
   const estimatedPageHeight = Math.round(scaledWidth * 1.414);
   const estimatedPageHeightRef = useRef(estimatedPageHeight);
   estimatedPageHeightRef.current = estimatedPageHeight;
+
+  const setVisibleAroundPage = useCallback((page: number) => {
+    setVisibleRange({
+      start: Math.max(1, page - BUFFER),
+      end: Math.min(numPages, page + BUFFER),
+    });
+  }, [numPages]);
+
+  const scrollToPageElement = useCallback((page: number) => {
+    const container = containerRef.current;
+    if (!container || !numPages || page < 1 || page > numPages) return false;
+    const target = document.getElementById(`page_${page}`);
+    if (!target) return false;
+    container.scrollTo({ top: target.offsetTop, behavior: "auto" });
+    return true;
+  }, [numPages]);
 
   useEffect(() => {
     import("react-pdf").then((mod) => {
@@ -105,37 +116,28 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
       isRestoringRef.current = false;
       return;
     }
+    const targetPage = Math.min(initialProgress, numPages || initialProgress);
+    setVisibleAroundPage(targetPage);
     const timer = setTimeout(() => {
-      const container = containerRef.current;
-      if (!container) return;
-      const gap = 16;
-      const pageHeight = estimatedPageHeightRef.current;
-      const paddingTop = 32;
-      const targetTop = paddingTop + (initialProgress - 1) * (pageHeight + gap);
-      container.scrollTo({ top: targetTop, behavior: "auto" });
+      scrollToPageElement(targetPage);
+      onPageChangeRef.current(targetPage);
       setTimeout(() => { isRestoringRef.current = false; }, 300);
     }, 100);
     return () => clearTimeout(timer);
-  }, [isPdfLoaded, initialProgress]);
+  }, [isPdfLoaded, initialProgress, numPages, scrollToPageElement, setVisibleAroundPage]);
 
   useImperativeHandle(ref, () => ({
     scrollToPage: (page: number) => {
-      const container = containerRef.current;
-      if (!container || !numPages) return;
       if (page < 1 || page > numPages) return;
       isJumpingRef.current = true;
-      const gap = 16;
-      const pageHeight = estimatedPageHeightRef.current;
-      const paddingTop = 32;
-      const targetTop = paddingTop + (page - 1) * (pageHeight + gap);
-      container.scrollTop = targetTop;
-      const start = Math.max(1, page - BUFFER);
-      const end = Math.min(numPages, page + BUFFER);
-      setVisibleRange({ start, end });
+      setVisibleAroundPage(page);
+      requestAnimationFrame(() => {
+        scrollToPageElement(page);
+      });
       onPageChangeRef.current(page);
-      setTimeout(() => { isJumpingRef.current = false; }, 100);
+      setTimeout(() => { isJumpingRef.current = false; }, 250);
     },
-  }), [numPages]);
+  }), [numPages, scrollToPageElement, setVisibleAroundPage]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -210,49 +212,18 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
   }, []);
 
   useEffect(() => {
-    if (numPages === 0) return;
-
-    const rafId = requestAnimationFrame(() => {
-      visibleRatios.current.clear();
-      observerRef.current?.disconnect();
-
-      const observer = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (entry.intersectionRatio > 0) {
-              visibleRatios.current.set(entry.target.id, entry.intersectionRatio);
-            } else {
-              visibleRatios.current.delete(entry.target.id);
-            }
-          }
-          let bestId = "";
-          let bestRatio = 0;
-          for (const [id, ratio] of visibleRatios.current) {
-            if (ratio > bestRatio) {
-              bestRatio = ratio;
-              bestId = id;
-            }
-          }
-          if (bestId) {
-            const pageNum = parseInt(bestId.replace("page_", ""), 10);
-            if (!isRestoringRef.current && !isJumpingRef.current) onActivePageChangeRef.current?.(pageNum);
-          }
-        },
-        { threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5] },
-      );
-
-      observerRef.current = observer;
-      for (let i = 0; i < numPages; i++) {
-        const el = document.getElementById(`page_${i + 1}`);
-        if (el) observer.observe(el);
-      }
-    });
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      observerRef.current?.disconnect();
-    };
-  }, [numPages]);
+    if (!isPdfLoaded || !numPages || lastZoomRef.current === zoom) return;
+    const anchorPage = Math.max(1, Math.min(currentPage, numPages));
+    lastZoomRef.current = zoom;
+    isJumpingRef.current = true;
+    setVisibleAroundPage(anchorPage);
+    const timer = window.setTimeout(() => {
+      scrollToPageElement(anchorPage);
+      onPageChangeRef.current(anchorPage);
+      window.setTimeout(() => { isJumpingRef.current = false; }, 200);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [currentPage, isPdfLoaded, numPages, scrollToPageElement, setVisibleAroundPage, zoom]);
 
   if (!ready) {
     return (
@@ -273,7 +244,7 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
       onMouseUp={handleMouseUp}
     >
       <style>{`
-        .react-pdf__Page__textContent { pointer-events: auto !important; z-index: 10 !important; font-family: ${fontFamily === "font-serif" ? "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif" : fontFamily === "font-mono" ? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" : "ui-sans-serif, system-ui, sans-serif"} !important; }
+        .react-pdf__Page__textContent { pointer-events: auto !important; z-index: 10 !important; }
         .react-pdf__Page__textContent span { cursor: text !important; }
       `}</style>
       <Document

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import katex from "katex";
 import type { PDFViewerHandle } from "./PDFViewer";
 import {
   Upload,
@@ -31,7 +32,6 @@ import {
 } from "lucide-react";
 import { cleanText } from "@/utils/textCleaner";
 import { getBookById, deleteBook, getBookFileBlob, updateBookProgress, updateEpubProgress, getNotes, saveNote, deleteNote, updateNote, loadReaderPreferences, saveReaderPreferences, type BookMeta, type Note, type ReaderPreferences } from "@/utils/storage";
-import "prismjs/themes/prism-tomorrow.css";
 
 function isCodeSnippet(text: string): boolean {
   if (/\b#include\b/.test(text)) return true;
@@ -57,6 +57,10 @@ function getCurrentChapter(activePage: number, tocItems: BookMeta["tocItems"]): 
 const PDFViewer = dynamic(() => import("./PDFViewer"), { ssr: false });
 const EpubViewer = dynamic(() => import("./EpubViewer").then(m => ({ default: m.EpubViewer })), { ssr: false });
 const MAX_AI_CONTEXT_CHARS = 12_000;
+const AI_CACHE_PREFIX = "ai_reader_ai_cache:";
+const AI_CACHE_VERSION = "v1";
+const AI_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const BOOK_CONTEXT_BLOCK_VERSION = "BOOK_CONTEXT_V1";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -77,6 +81,92 @@ interface ApiConfig {
     url: string;
     model: string;
   };
+}
+
+type AiCacheScope = "chat" | "selection" | "vocabulary" | "translation";
+
+interface AiCacheEntry {
+  content: string;
+  createdAt: number;
+  scope: AiCacheScope;
+  model: string;
+  parsed?: Message["parsed"];
+}
+
+interface ResolvedAiEndpoint {
+  isCloud: boolean;
+  provider: string;
+  url: string;
+  model: string;
+  apiKey?: string;
+}
+
+function normalizeCacheText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function stableHash(text: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function makeAiCacheKey(scope: AiCacheScope, payload: Record<string, unknown>): string {
+  return `${scope}:${stableHash(stableStringify({ version: AI_CACHE_VERSION, scope, ...payload }))}`;
+}
+
+function readAiCache(key: string): AiCacheEntry | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(`${AI_CACHE_PREFIX}${key}`);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as AiCacheEntry;
+    if (!entry.content || Date.now() - entry.createdAt > AI_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(`${AI_CACHE_PREFIX}${key}`);
+      return null;
+    }
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function writeAiCache(key: string, entry: AiCacheEntry): void {
+  if (typeof window === "undefined" || !entry.content.trim()) return;
+  try {
+    window.localStorage.setItem(`${AI_CACHE_PREFIX}${key}`, JSON.stringify(entry));
+  } catch {
+    // localStorage may be full or unavailable; caching is an optimization only.
+  }
+}
+
+function parseAssistantPayload(content: string): Message["parsed"] | undefined {
+  try {
+    const parsed = JSON.parse(content) as Partial<NonNullable<Message["parsed"]>>;
+    if (!parsed.term && !parsed.definition) return undefined;
+    return {
+      term: parsed.term || "",
+      definition: parsed.definition || "",
+      essence: parsed.essence || "",
+      context: parsed.context || "",
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function limitAiContext(raw: string): string {
@@ -255,6 +345,41 @@ const PROVIDER_PRESETS: Record<string, { name: string; url: string; model: strin
   custom: { name: 'Custom (自定义中转)', url: '', model: '' },
 };
 
+function resolveAiEndpoint(apiConfig: ApiConfig): ResolvedAiEndpoint {
+  const isCloud = apiConfig.engineMode === "cloud";
+  if (isCloud) {
+    const provider = apiConfig.cloud.currentProvider;
+    return {
+      isCloud,
+      provider,
+      apiKey: apiConfig.cloud.keys[provider],
+      url: apiConfig.cloud.customUrl || PROVIDER_PRESETS[provider]?.url || "",
+      model: apiConfig.cloud.customModel || PROVIDER_PRESETS[provider]?.model || "",
+    };
+  }
+  return {
+    isCloud,
+    provider: "local",
+    url: apiConfig.local.url,
+    model: apiConfig.local.model,
+  };
+}
+
+function buildAiSystemContent(userPrompt: string, context: string): string {
+  const prompt = userPrompt.trim();
+  const normalizedContext = context.trim() || "（当前页面暂无可用文本）";
+  return `${prompt}
+
+[${BOOK_CONTEXT_BLOCK_VERSION}]
+${normalizedContext}
+[/${BOOK_CONTEXT_BLOCK_VERSION}]
+
+回答规则：
+- 优先基于 ${BOOK_CONTEXT_BLOCK_VERSION} 中的当前阅读上下文回答。
+- 如果问题与上下文无关，可以基于你的通用知识回答。
+- 保持回答直接、紧凑，避免无关寒暄。`;
+}
+
 const AI_IDENTITIES: Record<string, { name: string; prompt: string }> = {
   default: {
     name: "💡 综合技术专家",
@@ -278,35 +403,33 @@ async function translateWithProvider(
   text: string,
   apiConfig: ApiConfig,
 ): Promise<string> {
-  const isCloud = apiConfig.engineMode === 'cloud';
-  let url: string;
-  let model: string;
-  let apiKey: string | undefined;
+  const endpoint = resolveAiEndpoint(apiConfig);
+  const translationPrompt = "You are a translator. Translate the following text to Chinese. Return only the translation, no explanations.";
+  const cacheKey = makeAiCacheKey("translation", {
+    provider: endpoint.provider,
+    model: endpoint.model,
+    endpointHash: stableHash(endpoint.url),
+    temperature: apiConfig.temperature,
+    promptHash: stableHash(translationPrompt),
+    textHash: stableHash(normalizeCacheText(text)),
+  });
+  const cached = readAiCache(cacheKey);
+  if (cached) return cached.content;
 
-  if (isCloud) {
-    const provider = apiConfig.cloud.currentProvider;
-    apiKey = apiConfig.cloud.keys[provider];
-    url = apiConfig.cloud.customUrl || PROVIDER_PRESETS[provider]?.url;
-    model = apiConfig.cloud.customModel || PROVIDER_PRESETS[provider]?.model;
-  } else {
-    url = apiConfig.local.url;
-    model = apiConfig.local.model;
-  }
-
-  if (!url || !model) return '请先配置 AI 提供商';
-  if (isCloud && !apiKey) return '请先配置 API Key';
+  if (!endpoint.url || !endpoint.model) return '请先配置 AI 提供商';
+  if (endpoint.isCloud && !endpoint.apiKey) return '请先配置 API Key';
 
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+    if (endpoint.apiKey) headers['Authorization'] = `Bearer ${endpoint.apiKey}`;
 
-    const res = await fetch(`${url}/chat/completions`, {
+    const res = await fetch(`${endpoint.url}/chat/completions`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model,
+        model: endpoint.model,
         messages: [
-          { role: 'system', content: 'You are a translator. Translate the following text to Chinese. Return only the translation, no explanations.' },
+          { role: 'system', content: translationPrompt },
           { role: 'user', content: text },
         ],
         stream: false,
@@ -318,30 +441,81 @@ async function translateWithProvider(
       return `请求失败 (${res.status}): ${errBody}`;
     }
     const data = await res.json();
-    return data.choices?.[0]?.message?.content || '翻译失败: 返回内容为空';
+    const content = data.choices?.[0]?.message?.content?.trim();
+    if (!content) return '翻译失败: 返回内容为空';
+    writeAiCache(cacheKey, {
+      content,
+      createdAt: Date.now(),
+      scope: "translation",
+      model: endpoint.model,
+    });
+    return content;
   } catch (e) {
-    return `网络错误: ${e instanceof Error ? e.message : String(e)}`;
+  return `网络错误: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderLatexToHtml(latex: string, displayMode: boolean): string {
+  const source = latex.trim();
+  if (!source) return "";
+  try {
+    return katex.renderToString(source, {
+      displayMode,
+      throwOnError: false,
+      strict: "ignore",
+      output: "html",
+    });
+  } catch {
+    return escapeHtml(displayMode ? `$$${source}$$` : `$${source}$`);
   }
 }
 
 const renderAIContent = (text: string) => {
   if (!text) return '';
 
-  let html = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  const placeholders: string[] = [];
+  const stashHtml = (html: string) => {
+    const token = `@@AI_READER_HTML_${placeholders.length}@@`;
+    placeholders.push(html);
+    return token;
+  };
 
-  html = html.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) => {
-    return `<div class="my-3 rounded-lg overflow-hidden border border-[var(--panel-border)] font-mono text-sm">
+  let html = text.replace(/```(\w*)\n([\s\S]*?)\n```/g, (_, lang, code) => {
+    return stashHtml(`<div class="my-3 rounded-lg overflow-hidden border border-[var(--panel-border)] font-mono text-sm">
       <div class="bg-[var(--input-bg)] text-[var(--text-muted)] px-3 py-1 text-xs flex justify-between uppercase">
-        <span>${lang || 'code'}</span>
+        <span>${escapeHtml(lang || 'code')}</span>
       </div>
-      <pre class="bg-[var(--panel-bg)] text-[var(--accent)] p-4 overflow-x-auto m-0 select-text font-mono leading-relaxed"><code>${code}</code></pre>
-    </div>`;
+      <pre class="bg-[var(--panel-bg)] text-[var(--accent)] p-4 overflow-x-auto m-0 select-text font-mono leading-relaxed"><code>${escapeHtml(code)}</code></pre>
+    </div>`);
   });
 
-  html = html.replace(/`([^`]+)`/g, '<code class="bg-[var(--input-bg)] text-[var(--accent)] px-1.5 py-0.5 rounded font-mono text-xs mx-0.5">$1</code>');
+  html = html.replace(/`([^`]+)`/g, (_, code) =>
+    stashHtml(`<code class="bg-[var(--input-bg)] text-[var(--accent)] px-1.5 py-0.5 rounded font-mono text-xs mx-0.5">${escapeHtml(code)}</code>`)
+  );
+
+  html = html
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) =>
+      stashHtml(`<div class="ai-latex-block">${renderLatexToHtml(latex, true)}</div>`)
+    )
+    .replace(/\\\[([\s\S]+?)\\\]/g, (_, latex) =>
+      stashHtml(`<div class="ai-latex-block">${renderLatexToHtml(latex, true)}</div>`)
+    )
+    .replace(/\\\(([\s\S]+?)\\\)/g, (_, latex) =>
+      stashHtml(`<span class="ai-latex-inline">${renderLatexToHtml(latex, false)}</span>`)
+    )
+    .replace(/(^|[^\\])\$([^\n$]+?)\$/g, (match, prefix, latex) => {
+      if (!latex.trim() || /^\s|\s$/.test(latex)) return match;
+      return `${prefix}${stashHtml(`<span class="ai-latex-inline">${renderLatexToHtml(latex, false)}</span>`)}`;
+    });
+
+  html = escapeHtml(html);
 
   html = html.replace(/\*\*([\s\S]+?)\*\*/g, '<strong class="font-bold text-[var(--foreground)]">$1</strong>');
 
@@ -353,7 +527,9 @@ const renderAIContent = (text: string) => {
 
   html = html.replace(/\n/g, '<br />');
 
-  return html;
+  return placeholders.reduce((output, replacement, index) => {
+    return output.replaceAll(`@@AI_READER_HTML_${index}@@`, replacement);
+  }, html);
 };
 
 export default function ReaderInner() {
@@ -482,6 +658,7 @@ export default function ReaderInner() {
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
+    setActivePage(page);
   }, []);
 
   const handleTextSelect = useCallback((text: string, centerX: number, rectTop: number, rectBottom: number) => {
@@ -505,21 +682,6 @@ export default function ReaderInner() {
       setTranslatePopover((p) => p ? { ...p, loading: false, result } : null);
     });
   }, [apiConfig]);
-
-  const handleActivePageChange = useCallback((page: number) => {
-    setActivePage(page);
-  }, []);
-
-  useEffect(() => {
-    if (!translatePopover || !translatePopover.isCode) return;
-    import("prismjs").then((Prism) => {
-      const el = document.getElementById("code-highlight-content");
-      if (el) {
-        const lang = Prism.languages.c || Prism.languages.clike;
-        el.innerHTML = Prism.highlight(translatePopover.word, lang, 'c');
-      }
-    });
-  }, [translatePopover]);
 
   useEffect(() => {
     if (!translatePopover) setCopied(false);
@@ -597,6 +759,10 @@ export default function ReaderInner() {
 
   const changeFontSize = useCallback((delta: number) => {
     setFontSize((prev) => Math.max(12, Math.min(32, prev + delta)));
+  }, []);
+
+  const changePdfZoom = useCallback((delta: number) => {
+    setZoom((prev) => Math.max(0.5, Math.min(3, Math.round((prev + delta) * 10) / 10)));
   }, []);
 
   const changeEpubWordSpacing = useCallback((delta: number) => {
@@ -824,26 +990,15 @@ export default function ReaderInner() {
   const sendMessage = useCallback(async (text: string, fresh?: boolean) => {
     if (!text.trim() || isStreaming) return;
 
-    const isCloud = apiConfig.engineMode === 'cloud';
-    let resolvedUrl: string;
-    let resolvedModel: string;
-    let resolvedKey: string | undefined;
+    const endpoint = resolveAiEndpoint(apiConfig);
+    const trimmedText = text.trim();
+    const scope: AiCacheScope = trimmedText.startsWith("请精准解释技术术语：")
+      ? "vocabulary"
+      : fresh
+        ? "selection"
+        : "chat";
 
-    if (isCloud) {
-      const provider = apiConfig.cloud.currentProvider;
-      resolvedKey = apiConfig.cloud.keys[provider];
-      resolvedUrl = apiConfig.cloud.customUrl || PROVIDER_PRESETS[provider]?.url;
-      resolvedModel = apiConfig.cloud.customModel || PROVIDER_PRESETS[provider]?.model;
-    } else {
-      resolvedUrl = apiConfig.local.url;
-      resolvedModel = apiConfig.local.model;
-    }
-
-    if (!resolvedUrl || !resolvedModel) {
-      setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "**提示：请先在顶部配置你的 DeepSeek API Key**" }]);
-      return;
-    }
-    if (isCloud && !resolvedKey) {
+    if (!endpoint.url || !endpoint.model) {
       setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "**提示：请先在顶部配置你的 DeepSeek API Key**" }]);
       return;
     }
@@ -851,32 +1006,54 @@ export default function ReaderInner() {
     setInput("");
 
     const context = limitAiContext(aiContextText || epubPageText || extractedText);
-    const systemContent = `${userPrompt}\n\n用户正在阅读一本书，以下是当前页面的上下文内容：\n\n${context}\n\n请基于以上上下文回答用户的问题。如果问题与上下文无关，可以基于你的知识回答。`;
-
-    let requestMessages: Array<{ role: string; content: string }>;
-
-    if (fresh) {
-      const freshUserContent = `针对以下电子书文本进行深度解析：\n"${text}"`;
-      setMessages(prev => [
+    const systemContent = buildAiSystemContent(userPrompt, context);
+    const historyMessages = scope === "chat"
+      ? messages.filter((message) => message.role !== "system")
+      : [];
+    const requestUserContent = fresh
+      ? `针对以下电子书文本进行深度解析：\n"${trimmedText}"`
+      : trimmedText;
+    const cacheKey = makeAiCacheKey(scope, {
+      provider: endpoint.provider,
+      model: endpoint.model,
+      endpointHash: stableHash(endpoint.url),
+      temperature: apiConfig.temperature,
+      promptHash: stableHash(normalizeCacheText(userPrompt)),
+      contextHash: stableHash(normalizeCacheText(context)),
+      userTextHash: stableHash(normalizeCacheText(requestUserContent)),
+      historyHash: scope === "chat"
+        ? stableHash(stableStringify(historyMessages.map((message) => ({
+          role: message.role,
+          content: normalizeCacheText(message.content),
+          parsed: message.parsed || null,
+        }))))
+        : "",
+    });
+    const cached = readAiCache(cacheKey);
+    if (cached) {
+      setMessages((prev) => [
         ...prev,
         { role: 'user', content: text },
-        { role: 'assistant', content: '' }
+        { role: 'assistant', content: cached.parsed ? "" : cached.content, parsed: cached.parsed },
       ]);
-      const historyMessages = messages.filter(m => m.role !== 'system');
-      requestMessages = [
-        { role: 'system', content: systemContent },
-        ...historyMessages.map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: freshUserContent },
-      ];
-    } else {
-      setMessages((prev) => [...prev, { role: 'user', content: text }]);
-      setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-      requestMessages = [
-        { role: 'system', content: systemContent },
-        ...messages.filter(m => m.role !== 'system').map((m) => ({ role: m.role, content: m.content })),
-        { role: 'user', content: text },
-      ];
+      return;
     }
+
+    if (endpoint.isCloud && !endpoint.apiKey) {
+      setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "**提示：请先在顶部配置你的 DeepSeek API Key**" }]);
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: text },
+      { role: 'assistant', content: '' },
+    ]);
+    const requestMessages = [
+      { role: 'system', content: systemContent },
+      ...historyMessages.map((message) => ({ role: message.role, content: message.content })),
+      { role: 'user', content: requestUserContent },
+    ];
 
     setIsStreaming(true);
 
@@ -884,15 +1061,15 @@ export default function ReaderInner() {
       const requestHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      if (resolvedKey) {
-        requestHeaders['Authorization'] = `Bearer ${resolvedKey}`;
+      if (endpoint.apiKey) {
+        requestHeaders['Authorization'] = `Bearer ${endpoint.apiKey}`;
       }
 
-      const res = await fetch(`${resolvedUrl}/chat/completions`, {
+      const res = await fetch(`${endpoint.url}/chat/completions`, {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify({
-          model: resolvedModel,
+          model: endpoint.model,
           messages: requestMessages,
           stream: true,
           temperature: apiConfig.temperature,
@@ -928,12 +1105,17 @@ export default function ReaderInner() {
           } catch {}
         }
       }
-      try {
-        const parsed = JSON.parse(accumulated);
-        if (parsed.term || parsed.definition) {
-          setMessages((prev) => { const u = [...prev]; const l = u[u.length - 1]; if (l.role === "assistant") { l.parsed = parsed; l.content = ""; } return u; });
-        }
-      } catch {}
+      const parsed = parseAssistantPayload(accumulated);
+      if (parsed) {
+        setMessages((prev) => { const u = [...prev]; const l = u[u.length - 1]; if (l.role === "assistant") { l.parsed = parsed; l.content = ""; } return u; });
+      }
+      writeAiCache(cacheKey, {
+        content: accumulated,
+        createdAt: Date.now(),
+        scope,
+        model: endpoint.model,
+        parsed,
+      });
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       setMessages((prev) => { const u = [...prev]; const l = u[u.length - 1]; if (l.role === "assistant") l.content = `请求异常: ${errorMsg}`; return u; });
@@ -1283,8 +1465,8 @@ export default function ReaderInner() {
 
   useEffect(() => {
     if (bookFormat !== "pdf" || !bookId || totalPages === 0) return;
-    updateBookProgress(bookId, activePage, totalPages);
-  }, [bookFormat, activePage, totalPages, bookId]);
+    updateBookProgress(bookId, currentPage, totalPages);
+  }, [bookFormat, currentPage, totalPages, bookId]);
 
   if (isLoading) return <div className="flex h-full items-center justify-center bg-[var(--background)]"><Loader2 size={24} className="animate-spin text-[var(--text-muted)]" /></div>;
   if (notFound) return <div className="flex h-full flex-col items-center justify-center gap-4 bg-[var(--background)]"><p className="text-[var(--text-muted)]">书籍未找到</p><button onClick={() => router.push("/")} className="cursor-pointer rounded-lg border border-[var(--panel-border)] px-4 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]">返回书架</button></div>;
@@ -1328,7 +1510,7 @@ export default function ReaderInner() {
         </div>
       )}
 
-      <div className={`relative z-0 flex min-w-0 flex-col overflow-hidden ${fontFamily}`} style={{ width: leftPanelWidth, backgroundColor: "var(--reader-bg)" }}>
+      <div className={`relative z-0 flex min-w-0 flex-col overflow-hidden ${bookFormat === "pdf" ? "" : fontFamily}`} style={{ width: leftPanelWidth, backgroundColor: "var(--reader-bg)" }}>
         <div className="app-window-drag-region relative z-0 flex w-full min-w-0 flex-nowrap items-center gap-2 overflow-hidden border-b border-[var(--panel-border)] bg-[var(--toolbar-bg)] py-3 pl-28 pr-4">
           <button onClick={() => router.push("/")} className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"><ArrowLeft size={14} />书架</button>
           <input ref={fileInputRef} type="file" accept=".pdf,.epub,.txt" className="hidden" onChange={handleFileChange} />
@@ -1337,11 +1519,13 @@ export default function ReaderInner() {
             <button onClick={() => setShowToc((v) => !v)} className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><List size={14} />目录</button>
           )}
           <button onClick={handleDeleteBook} className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-red-500 hover:text-red-400"><Trash2 size={14} />删除</button>
-          <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value as ReaderFontKey)} className="shrink-0 cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-2 py-1.5 text-xs text-[var(--text-secondary)] outline-none transition-colors hover:border-[var(--accent)]">
-            {READER_FONT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          {bookFormat !== "pdf" && (
+            <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value as ReaderFontKey)} className="shrink-0 cursor-pointer rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)] px-2 py-1.5 text-xs text-[var(--text-secondary)] outline-none transition-colors hover:border-[var(--accent)]">
+              {READER_FONT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          )}
           <div className="mx-2 flex shrink-0 items-center gap-1.5">
             {(Object.keys(READER_THEMES) as ThemeKey[]).map((key) => (
               <button
@@ -1358,11 +1542,19 @@ export default function ReaderInner() {
             ))}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
-            <button onClick={() => changeFontSize(-2)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="缩小字号">A-</button>
-            <span className="w-8 text-center tabular-nums">{fontSize}px</span>
-            <button onClick={() => changeFontSize(2)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="放大字号">A+</button>
-          </div>
+          {bookFormat === "pdf" ? (
+            <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
+              <button onClick={() => changePdfZoom(-0.1)} className="flex cursor-pointer items-center rounded px-1.5 py-1 transition-colors hover:text-[var(--foreground)]" title="缩小页面"><ZoomOut size={14} /></button>
+              <span className="w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+              <button onClick={() => changePdfZoom(0.1)} className="flex cursor-pointer items-center rounded px-1.5 py-1 transition-colors hover:text-[var(--foreground)]" title="放大页面"><ZoomIn size={14} /></button>
+            </div>
+          ) : (
+            <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
+              <button onClick={() => changeFontSize(-2)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="缩小字号">A-</button>
+              <span className="w-8 text-center tabular-nums">{fontSize}px</span>
+              <button onClick={() => changeFontSize(2)} className="flex cursor-pointer items-center rounded px-1.5 py-1 font-bold transition-colors hover:text-[var(--foreground)]" title="放大字号">A+</button>
+            </div>
+          )}
 
           {bookFormat === "epub" && (
             <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)]">
@@ -1377,10 +1569,6 @@ export default function ReaderInner() {
 
           {bookFormat === "pdf" && totalPages > 0 && (
             <div className="ml-auto flex min-w-0 shrink items-center justify-end gap-2 overflow-hidden text-xs text-[var(--text-muted)]">
-              <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.2))} className="cursor-pointer rounded p-0.5 transition-colors hover:text-[var(--foreground)]"><ZoomOut size={14} /></button>
-              <span className="w-10 text-center">{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom((z) => Math.min(3, z + 0.2))} className="cursor-pointer rounded p-0.5 transition-colors hover:text-[var(--foreground)]"><ZoomIn size={14} /></button>
-              <div className="mx-2 h-4 w-px bg-[var(--panel-border)]" />
               <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} className="cursor-pointer rounded p-0.5 transition-colors hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-30"><ChevronLeft size={14} /></button>
               <input
                 value={pageInput}
@@ -1426,8 +1614,7 @@ export default function ReaderInner() {
                 onContextMenu={handleContextMenu}
                 onPageChange={handlePageChange}
                 onTextSelect={handleTextSelect}
-                onActivePageChange={handleActivePageChange}
-                fontFamily={fontFamily}
+                currentPage={currentPage}
                 initialProgress={initialProgress}
               />
           ) : (
@@ -1613,13 +1800,13 @@ export default function ReaderInner() {
                       {msg.parsed ? (
                         <div className="space-y-2">
                           <div className="flex items-center gap-2"><span className="rounded bg-[var(--accent)]/20 px-2 py-0.5 text-xs font-bold text-[var(--accent)]">{msg.parsed.term}</span></div>
-                          <p className="text-lg">{msg.parsed.definition}</p>
+                          <div className="ai-message-content text-lg" dangerouslySetInnerHTML={{ __html: renderAIContent(msg.parsed.definition) }} />
                           <div className="border-t border-[var(--panel-border)] pt-1.5 text-[13px] text-[var(--text-muted)]">
-                            <p><span className="font-medium text-[var(--foreground)]">核心本质</span>：{msg.parsed.essence}</p>
-                            <p className="mt-0.5"><span className="font-medium text-[var(--foreground)]">当前语境</span>：{msg.parsed.context}</p>
+                            <div><span className="font-medium text-[var(--foreground)]">核心本质</span>：<div className="ai-message-content inline" dangerouslySetInnerHTML={{ __html: renderAIContent(msg.parsed.essence) }} /></div>
+                            <div className="mt-0.5"><span className="font-medium text-[var(--foreground)]">当前语境</span>：<div className="ai-message-content inline" dangerouslySetInnerHTML={{ __html: renderAIContent(msg.parsed.context) }} /></div>
                           </div>
                         </div>
-                      ) : msg.content ? <div className="select-text whitespace-pre-wrap pr-2 text-sm leading-relaxed text-[var(--foreground)]" dangerouslySetInnerHTML={{ __html: memoizedHtmlContents[i] }} onContextMenu={(e) => { const selection = window.getSelection(); const selectedText = selection ? selection.toString().trim() : ''; if (selectedText) { e.preventDefault(); setAiContextMenu({ x: e.clientX, y: e.clientY, text: selectedText }); } }} /> : <span className="inline-flex items-center gap-1"><Loader2 size={14} className="animate-spin text-[var(--text-muted)]" /><span className="text-[var(--text-muted)]">思考中...</span></span>}
+                      ) : msg.content ? <div className="ai-message-content select-text whitespace-pre-wrap pr-2 text-sm leading-relaxed text-[var(--foreground)]" dangerouslySetInnerHTML={{ __html: memoizedHtmlContents[i] }} onContextMenu={(e) => { const selection = window.getSelection(); const selectedText = selection ? selection.toString().trim() : ''; if (selectedText) { e.preventDefault(); setAiContextMenu({ x: e.clientX, y: e.clientY, text: selectedText }); } }} /> : <span className="inline-flex items-center gap-1"><Loader2 size={14} className="animate-spin text-[var(--text-muted)]" /><span className="text-[var(--text-muted)]">思考中...</span></span>}
                     </div>
                   </div>
                 </div>
@@ -1783,7 +1970,7 @@ export default function ReaderInner() {
             <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(translatePopover.word).then(() => setCopied(true)); setTimeout(() => setCopied(false), 1500); }} className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-white/40 transition-colors hover:text-white/80"><Copy size={11} />{copied ? "Copied!" : "Copy"}</button>
           </div>
           <pre className="m-0 overflow-x-auto rounded-b-lg bg-[var(--input-bg)] p-0">
-            <code id="code-highlight-content" className="language-c block p-4 text-[13px] leading-[1.6]" />
+            <code className="block p-4 font-mono text-[13px] leading-[1.6] text-[var(--foreground)]">{translatePopover.word}</code>
           </pre>
         </div>
       ) : translatePopover && (

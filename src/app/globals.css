@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "katex/dist/katex.min.css";
 
 :root {
   --background: #0a0a0a;
@@ -74,4 +75,29 @@ a,
 
 ::-webkit-scrollbar-thumb:hover {
   background: #3a3a3a;
+}
+
+.ai-message-content .ai-latex-block {
+  margin: 0.75rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
+
+.ai-message-content .ai-latex-inline {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: -0.15em;
+}
+
+.ai-message-content .katex {
+  color: var(--foreground);
+  font-size: 1.04em;
+}
+
+.ai-message-content .katex-display {
+  margin: 0;
 }
