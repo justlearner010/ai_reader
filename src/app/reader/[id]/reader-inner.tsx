@@ -6,6 +6,25 @@ import dynamic from "next/dynamic";
 import katex from "katex";
 import type { PDFViewerHandle } from "./PDFViewer";
 import {
+  AI_IDENTITIES,
+  DEFAULT_API_CONFIG,
+  PROVIDER_PRESETS,
+  buildAiSystemContent,
+  limitAiContext,
+  makeAiCacheKey,
+  normalizeCacheText,
+  parseAssistantPayload,
+  readAiCache,
+  resolveAiEndpoint,
+  stableHash,
+  stableStringify,
+  translateWithProvider,
+  writeAiCache,
+  type AiCacheScope,
+  type ApiConfig,
+  type Message,
+} from "./ai-reader-session";
+import {
   Upload,
   Send,
   BookOpen,
@@ -31,7 +50,9 @@ import {
   Settings,
 } from "lucide-react";
 import { cleanText } from "@/utils/textCleaner";
-import { getBookById, deleteBook, getBookFileBlob, updateBookProgress, updateEpubProgress, getNotes, saveNote, deleteNote, updateNote, loadReaderPreferences, saveReaderPreferences, type BookMeta, type Note, type ReaderPreferences } from "@/utils/storage";
+import { deleteBook, updateBookProgress, updateEpubProgress, loadReaderPreferences, saveReaderPreferences, type BookMeta } from "@/utils/storage";
+import { useReaderBook } from "./useReaderBook";
+import { useReaderNotes } from "./useReaderNotes";
 
 function isCodeSnippet(text: string): boolean {
   if (/\b#include\b/.test(text)) return true;
@@ -44,141 +65,17 @@ function isCodeSnippet(text: string): boolean {
   return keywordCount >= 2 && hasPunctuation;
 }
 
-function getCurrentChapter(activePage: number, tocItems: BookMeta["tocItems"]): string {
-  if (!tocItems || tocItems.length === 0) return "";
-  let chapter = "";
-  for (const item of tocItems) {
-    if (item.page <= activePage) chapter = item.title;
-    else break;
-  }
-  return chapter;
-}
-
 const PDFViewer = dynamic(() => import("./PDFViewer"), { ssr: false });
 const EpubViewer = dynamic(() => import("./EpubViewer").then(m => ({ default: m.EpubViewer })), { ssr: false });
-const MAX_AI_CONTEXT_CHARS = 12_000;
-const AI_CACHE_PREFIX = "ai_reader_ai_cache:";
-const AI_CACHE_VERSION = "v1";
-const AI_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-const BOOK_CONTEXT_BLOCK_VERSION = "BOOK_CONTEXT_V1";
 
-interface Message {
-  role: "user" | "assistant" | "system";
-  content: string;
-  parsed?: { term: string; definition: string; essence: string; context: string };
-}
-
-interface ApiConfig {
-  engineMode: string;
-  temperature: number;
-  cloud: {
-    currentProvider: string;
-    keys: Record<string, string>;
-    customUrl: string;
-    customModel: string;
-  };
-  local: {
-    url: string;
-    model: string;
-  };
-}
-
-type AiCacheScope = "chat" | "selection" | "vocabulary" | "translation";
-
-interface AiCacheEntry {
-  content: string;
-  createdAt: number;
-  scope: AiCacheScope;
-  model: string;
-  parsed?: Message["parsed"];
-}
-
-interface ResolvedAiEndpoint {
-  isCloud: boolean;
-  provider: string;
-  url: string;
-  model: string;
-  apiKey?: string;
-}
-
-function normalizeCacheText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-function stableHash(text: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function makeAiCacheKey(scope: AiCacheScope, payload: Record<string, unknown>): string {
-  return `${scope}:${stableHash(stableStringify({ version: AI_CACHE_VERSION, scope, ...payload }))}`;
-}
-
-function readAiCache(key: string): AiCacheEntry | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(`${AI_CACHE_PREFIX}${key}`);
-    if (!raw) return null;
-    const entry = JSON.parse(raw) as AiCacheEntry;
-    if (!entry.content || Date.now() - entry.createdAt > AI_CACHE_MAX_AGE_MS) {
-      window.localStorage.removeItem(`${AI_CACHE_PREFIX}${key}`);
-      return null;
-    }
-    return entry;
-  } catch {
-    return null;
-  }
-}
-
-function writeAiCache(key: string, entry: AiCacheEntry): void {
-  if (typeof window === "undefined" || !entry.content.trim()) return;
-  try {
-    window.localStorage.setItem(`${AI_CACHE_PREFIX}${key}`, JSON.stringify(entry));
-  } catch {
-    // localStorage may be full or unavailable; caching is an optimization only.
-  }
-}
-
-function parseAssistantPayload(content: string): Message["parsed"] | undefined {
-  try {
-    const parsed = JSON.parse(content) as Partial<NonNullable<Message["parsed"]>>;
-    if (!parsed.term && !parsed.definition) return undefined;
-    return {
-      term: parsed.term || "",
-      definition: parsed.definition || "",
-      essence: parsed.essence || "",
-      context: parsed.context || "",
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function limitAiContext(raw: string): string {
-  const text = cleanText(raw);
-  if (text.length <= MAX_AI_CONTEXT_CHARS) return text;
-  const half = Math.floor(MAX_AI_CONTEXT_CHARS / 2);
-  return `${text.slice(0, half)}\n\n...[已截断中间内容，避免上下文过长]...\n\n${text.slice(-half)}`;
+interface PdfOutlineDocument {
+  getDestination(dest: string): Promise<Array<unknown> | null>;
+  getPageIndex(pageRef: unknown): Promise<number>;
 }
 
 async function resolveOutlinePages(
   items: Array<{ title: string; dest: string | Array<unknown> | null; items: Array<unknown> }>,
-  pdfDoc: any,
+  pdfDoc: PdfOutlineDocument,
   level: number,
 ): Promise<BookMeta["tocItems"]> {
   const result: BookMeta["tocItems"] = [];
@@ -341,122 +238,69 @@ const READER_FONT_OPTIONS = [
 
 type ReaderFontKey = typeof READER_FONT_OPTIONS[number]["value"];
 
-const PROVIDER_PRESETS: Record<string, { name: string; url: string; model: string }> = {
-  deepseek: { name: 'DeepSeek 官方', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-  siliconflow: { name: '硅基流动 (SiliconFlow)', url: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3' },
-  openai: { name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  openrouter: { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'google/gemini-2.5-flash' },
-  custom: { name: 'Custom (自定义中转)', url: '', model: '' },
-};
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
 
-function resolveAiEndpoint(apiConfig: ApiConfig): ResolvedAiEndpoint {
-  const isCloud = apiConfig.engineMode === "cloud";
-  if (isCloud) {
-    const provider = apiConfig.cloud.currentProvider;
+function readString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function readStringMap(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+}
+
+function normalizeSavedApiConfig(value: unknown): ApiConfig | null {
+  if (!isRecord(value)) return null;
+  const temperature = typeof value.temperature === "number" ? value.temperature : 1.0;
+  const cloud = isRecord(value.cloud) ? value.cloud : null;
+
+  if (typeof value.key !== "undefined" && !cloud) {
     return {
-      isCloud,
-      provider,
-      apiKey: apiConfig.cloud.keys[provider],
-      url: apiConfig.cloud.customUrl || PROVIDER_PRESETS[provider]?.url || "",
-      model: apiConfig.cloud.customModel || PROVIDER_PRESETS[provider]?.model || "",
+      engineMode: "cloud",
+      temperature,
+      cloud: {
+        currentProvider: "custom",
+        keys: {
+          deepseek: "",
+          siliconflow: "",
+          openai: "",
+          openrouter: "",
+          custom: readString(value.key),
+        },
+        customUrl: readString(value.url),
+        customModel: readString(value.model),
+      },
+      local: DEFAULT_API_CONFIG.local,
     };
   }
+
+  const local = isRecord(value.local) ? value.local : null;
+  const cloudKeys = readStringMap(cloud?.keys);
+  const legacyCloudKey = cloud ? readString(cloud.key) : "";
   return {
-    isCloud,
-    provider: "local",
-    url: apiConfig.local.url,
-    model: apiConfig.local.model,
+    engineMode: readString(value.engineMode, DEFAULT_API_CONFIG.engineMode),
+    temperature,
+    cloud: {
+      currentProvider: readString(cloud?.currentProvider, DEFAULT_API_CONFIG.cloud.currentProvider),
+      keys: {
+        deepseek: legacyCloudKey || cloudKeys.deepseek || "",
+        siliconflow: cloudKeys.siliconflow || "",
+        openai: cloudKeys.openai || "",
+        openrouter: cloudKeys.openrouter || "",
+        custom: cloudKeys.custom || "",
+      },
+      customUrl: readString(cloud?.customUrl),
+      customModel: readString(cloud?.customModel),
+    },
+    local: {
+      url: readString(local?.url, DEFAULT_API_CONFIG.local.url),
+      model: readString(local?.model, DEFAULT_API_CONFIG.local.model),
+    },
   };
-}
-
-function buildAiSystemContent(userPrompt: string, context: string): string {
-  const prompt = userPrompt.trim();
-  const normalizedContext = context.trim() || "（当前页面暂无可用文本）";
-  return `${prompt}
-
-[${BOOK_CONTEXT_BLOCK_VERSION}]
-${normalizedContext}
-[/${BOOK_CONTEXT_BLOCK_VERSION}]
-
-回答规则：
-- 优先基于 ${BOOK_CONTEXT_BLOCK_VERSION} 中的当前阅读上下文回答。
-- 如果问题与上下文无关，可以基于你的通用知识回答。
-- 保持回答直接、紧凑，避免无关寒暄。`;
-}
-
-const AI_IDENTITIES: Record<string, { name: string; prompt: string }> = {
-  default: {
-    name: "综合技术专家",
-    prompt: "你是一个一针见血的技术与文学专家，请用最简练、直击本质的话语为用户解释划词内容。"
-  },
-  coder: {
-    name: "源码推演家",
-    prompt: "你是一个精通 C++、Linux 内核和 AI Infra 的硬核架构师。请直接剖析用户划词背后的底层系统机制、内存堆栈变化或算法时空复杂度，多用代码块示例，拒绝废话。"
-  },
-  translator: {
-    name: "极简翻译官",
-    prompt: "你是一个同声传译专家。请直接给出用户划词最地道的中文翻译，并在下方列出 2-3 个最核心的专业词汇延伸解析，格式要极其紧凑。"
-  },
-  detective: {
-    name: "悬疑伏笔拆解手",
-    prompt: "你是一个深谙新本格派的悬疑小说家。请帮我严密分析用户划出这段话背后的文学隐喻、心理博弈或潜在的剧情伏笔。"
-  },
-};
-
-async function translateWithProvider(
-  text: string,
-  apiConfig: ApiConfig,
-): Promise<string> {
-  const endpoint = resolveAiEndpoint(apiConfig);
-  const translationPrompt = "You are a translator. Translate the following text to Chinese. Return only the translation, no explanations.";
-  const cacheKey = makeAiCacheKey("translation", {
-    provider: endpoint.provider,
-    model: endpoint.model,
-    endpointHash: stableHash(endpoint.url),
-    temperature: apiConfig.temperature,
-    promptHash: stableHash(translationPrompt),
-    textHash: stableHash(normalizeCacheText(text)),
-  });
-  const cached = readAiCache(cacheKey);
-  if (cached) return cached.content;
-
-  if (!endpoint.url || !endpoint.model) return '请先配置 AI 提供商';
-  if (endpoint.isCloud && !endpoint.apiKey) return '请先配置 API Key';
-
-  try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (endpoint.apiKey) headers['Authorization'] = `Bearer ${endpoint.apiKey}`;
-
-    const res = await fetch(`${endpoint.url}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: endpoint.model,
-        messages: [
-          { role: 'system', content: translationPrompt },
-          { role: 'user', content: text },
-        ],
-        stream: false,
-        temperature: apiConfig.temperature,
-      }),
-    });
-    if (!res.ok) {
-      const errBody = await res.text();
-      return `请求失败 (${res.status}): ${errBody}`;
-    }
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content?.trim();
-    if (!content) return '翻译失败: 返回内容为空';
-    writeAiCache(cacheKey, {
-      content,
-      createdAt: Date.now(),
-      scope: "translation",
-      model: endpoint.model,
-    });
-    return content;
-  } catch (e) {
-  return `网络错误: ${e instanceof Error ? e.message : String(e)}`;
-  }
 }
 
 function escapeHtml(value: string): string {
@@ -541,15 +385,11 @@ export default function ReaderInner() {
   const router = useRouter();
   const bookId = params.id as string;
 
-  const [bookTitle, setBookTitle] = useState("");
-  const [bookFormat, setBookFormat] = useState<"pdf" | "epub" | "txt">("txt");
   const [leftRatio, setLeftRatio] = useState(0.6);
   const [showToc, setShowToc] = useState(false);
-  const [tocItems, setTocItems] = useState<BookMeta["tocItems"]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [zoom, setZoom] = useState(1);
-  const [extractedText, setExtractedText] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const memoizedHtmlContents = useMemo(() => {
     return messages.map(msg =>
@@ -578,13 +418,8 @@ export default function ReaderInner() {
     isCode: boolean;
   } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [fileMissing, setFileMissing] = useState(false);
-  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
   const [pageInput, setPageInput] = useState("1");
   const [activePage, setActivePage] = useState(1);
-  const [pageMarkers, setPageMarkers] = useState<number[]>([]);
   const [aiContextText, setAiContextText] = useState("");
   const [epubPageText, setEpubPageText] = useState("");
   const [identityId, setIdentityId] = useState("default");
@@ -595,41 +430,10 @@ export default function ReaderInner() {
   const [fontSize, setFontSize] = useState(16);
   const [epubWordSpacing, setEpubWordSpacing] = useState(0);
   const [isPrefsLoaded, setIsPrefsLoaded] = useState(false);
-  const [notes, setNotes] = useState<Note[]>([]);
   const [sidebarTab, setSidebarTab] = useState<"chat" | "notes">("chat");
-  const [editingNote, setEditingNote] = useState<{
-    id?: string;
-    quote: string;
-    pageNumber: number;
-    content: string;
-    isEditing: boolean;
-    anchor?: Note["anchor"];
-  } | null>(null);
-  const [initialProgress, setInitialProgress] = useState(0);
-  const [initialCfi, setInitialCfi] = useState("");
   const [currentEpubCfi, setCurrentEpubCfi] = useState("");
-  const [returnToPage, setReturnToPage] = useState<number | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [apiConfig, setApiConfig] = useState<ApiConfig>({
-    engineMode: 'cloud',
-    temperature: 1.0,
-    cloud: {
-      currentProvider: 'deepseek',
-      keys: {
-        deepseek: '',
-        siliconflow: '',
-        openai: '',
-        openrouter: '',
-        custom: '',
-      },
-      customUrl: '',
-      customModel: '',
-    },
-    local: {
-      url: 'http://localhost:11434/v1',
-      model: 'qwen2.5',
-    },
-  });
+  const [apiConfig, setApiConfig] = useState<ApiConfig>(DEFAULT_API_CONFIG);
   const [showSettings, setShowSettings] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
 
@@ -637,16 +441,53 @@ export default function ReaderInner() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
-  const pdfDataRef = useRef<ArrayBuffer | null>(null);
   const initialLoadDone = useRef(false);
-  const pdfDocRef = useRef<any>(null);
+  const pdfDocRef = useRef<PdfOutlineDocument | null>(null);
   const pdfViewerRef = useRef<PDFViewerHandle>(null);
   const translatePopoverRef = useRef<HTMLDivElement>(null);
 
-  const loadPdf = useCallback((arrayBuffer: ArrayBuffer) => {
-    pdfDataRef.current = arrayBuffer;
-    setPdfData(arrayBuffer);
-  }, []);
+  const {
+    bookTitle,
+    bookFormat,
+    tocItems,
+    extractedText,
+    isLoading,
+    notFound,
+    fileMissing,
+    pdfData,
+    pageMarkers,
+    initialProgress,
+    initialCfi,
+    pdfDataRef,
+    loadLocalFile,
+    setTocItems,
+    setPageMarkers,
+    setExtractedText,
+  } = useReaderBook(bookId);
+
+  const {
+    notes,
+    editingNote,
+    setEditingNote,
+    returnToPage,
+    setReturnToPage,
+    startSelectionNote,
+    startManualNote,
+    saveEditingNote,
+    editNote,
+    deleteReaderNote,
+    exportObsidian,
+    saveAiSelectionNote,
+  } = useReaderNotes({
+    bookId,
+    bookTitle,
+    bookFormat,
+    activePage,
+    currentEpubCfi,
+    initialCfi,
+    extractedText,
+    tocItems,
+  });
 
   const handleLoadSuccess = useCallback((pdf: { numPages: number }) => {
     setTotalPages(pdf.numPages);
@@ -725,7 +566,7 @@ export default function ReaderInner() {
         console.error("PDF 文本提取失败（不影响阅读）:", err);
       }
     })();
-  }, [pdfData, bookFormat, extractedText]);
+  }, [pdfData, bookFormat, extractedText, pdfDataRef, setExtractedText, setPageMarkers]);
 
   useEffect(() => {
     const arrayBuffer = pdfDataRef.current;
@@ -750,7 +591,7 @@ export default function ReaderInner() {
         console.error("目录解析失败:", err);
       }
     })();
-  }, [pdfData, bookFormat]);
+  }, [pdfData, bookFormat, pdfDataRef, setTocItems]);
 
   const handleEpubProgress = useCallback((cfi: string) => {
     setCurrentEpubCfi(cfi);
@@ -788,7 +629,7 @@ export default function ReaderInner() {
   useEffect(() => {
     const loadPrefs = async () => {
       try {
-        const savedSettings = await loadReaderPreferences() as ReaderPreferences & { apiConfig?: any };
+        const savedSettings = await loadReaderPreferences();
         if (savedSettings) {
           if (savedSettings.theme && savedSettings.theme in READER_THEMES) {
             setTheme(savedSettings.theme as ThemeKey);
@@ -798,48 +639,8 @@ export default function ReaderInner() {
             setFontFamily(savedSettings.fontFamily as ReaderFontKey);
           }
           setEpubWordSpacing(Math.max(0, Math.min(12, savedSettings.epubWordSpacing || 0)));
-          if (savedSettings.apiConfig) {
-            const old = savedSettings.apiConfig;
-            if (typeof old.key !== 'undefined' && !old.cloud) {
-              setApiConfig({
-                engineMode: 'cloud',
-                temperature: old.temperature ?? 1.0,
-                cloud: {
-                  currentProvider: 'custom',
-                  keys: {
-                    deepseek: '',
-                    siliconflow: '',
-                    openai: '',
-                    openrouter: '',
-                    custom: old.key || '',
-                  },
-                  customUrl: old.url || '',
-                  customModel: old.model || '',
-                },
-                local: { url: 'http://localhost:11434/v1', model: 'qwen2.5' },
-              });
-            } else if (old.cloud && typeof old.cloud.key !== 'undefined') {
-              setApiConfig({
-                engineMode: old.engineMode || 'cloud',
-                temperature: old.temperature ?? 1.0,
-                cloud: {
-                  currentProvider: old.cloud.currentProvider || 'deepseek',
-                  keys: {
-                    deepseek: old.cloud.key || old.cloud.keys?.deepseek || '',
-                    siliconflow: old.cloud.keys?.siliconflow || '',
-                    openai: old.cloud.keys?.openai || '',
-                    openrouter: old.cloud.keys?.openrouter || '',
-                    custom: old.cloud.keys?.custom || '',
-                  },
-                  customUrl: old.cloud.customUrl || '',
-                  customModel: old.cloud.customModel || '',
-                },
-                local: old.local || { url: 'http://localhost:11434/v1', model: 'qwen2.5' },
-              });
-            } else {
-              setApiConfig({ ...old, temperature: old.temperature ?? 1.0 });
-            }
-          }
+          const savedApiConfig = normalizeSavedApiConfig(savedSettings.apiConfig);
+          if (savedApiConfig) setApiConfig(savedApiConfig);
           if (savedSettings.identityId && AI_IDENTITIES[savedSettings.identityId]) {
             setIdentityId(savedSettings.identityId);
             setUserPrompt(savedSettings.userPrompt || AI_IDENTITIES[savedSettings.identityId].prompt);
@@ -855,84 +656,6 @@ export default function ReaderInner() {
   }, []);
 
   useEffect(() => {
-    console.log("📚 读者页面加载，当前 bookId:", bookId);
-
-    if (!bookId) {
-      console.warn("⚠️ bookId 为空或 undefined");
-      setNotFound(true);
-      setIsLoading(false);
-      return;
-    }
-
-    (async () => {
-      try {
-        const book = await getBookById(bookId);
-        console.log("📖 getBookById 返回:", book ? `成功获取书籍 "${book.title}" (ID: ${book.id})` : "获取为空 (null)");
-
-        if (!book) {
-          console.warn(`⚠️ 未找到 ID 为 "${bookId}" 的书籍`);
-          setNotFound(true);
-          setIsLoading(false);
-          return;
-        }
-
-        setBookTitle(book.title);
-        setBookFormat(book.fileType);
-        setTocItems(book.tocItems);
-        setPageMarkers(book.pageMarkers || []);
-        setInitialProgress(book.currentPage || 0);
-        setInitialCfi(book.epubCfi || "");
-        setFileMissing(false);
-        if (book.fileType !== "epub" && book.content) {
-          setExtractedText(book.content);
-        }
-        if (book.epubCfi) {
-          localStorage.setItem(`epub_progress_${bookId}`, book.epubCfi);
-        }
-
-        if (book.fileType === "txt") {
-          setExtractedText(book.content);
-          setIsLoading(false);
-          return;
-        }
-
-        console.log("🔍 [PARENT DIALOG] 1. 成功准备获取二进制文件，bookId:", bookId);
-
-        try {
-          const fileResult = await getBookFileBlob(book);
-          console.log("🔍 [PARENT DIALOG] 2. getBookFileBlob 响应返回！对象是否存在:", !!fileResult);
-
-          if (fileResult) {
-            console.log("🔍 [PARENT DIALOG] 3. 文件类型:", Object.prototype.toString.call(fileResult));
-
-            const arrayBuffer = await fileResult.arrayBuffer();
-            console.log("🔍 [PARENT DIALOG] 3b. arrayBuffer 转换成功，字节数:", arrayBuffer.byteLength);
-
-            loadPdf(arrayBuffer);
-            console.log("🔍 [PARENT DIALOG] 4. loadPdf(arrayBuffer) 执行完毕");
-          } else {
-            console.error("🚨 [PARENT ERROR] 数据库中未找到该书籍的二进制数据！");
-            setFileMissing(true);
-            setIsLoading(false);
-            return;
-          }
-        } catch (fetchErr) {
-          console.error("🚨 [PARENT FATAL ERROR] 读取文件流失败:", fetchErr);
-          setFileMissing(true);
-          setIsLoading(false);
-          return;
-        }
-
-        setIsLoading(false);
-      } catch (err) {
-        console.error("❌ 书籍加载过程抛出异常:", err);
-        setNotFound(true);
-        setIsLoading(false);
-      }
-    })();
-  }, [bookId, loadPdf]);
-
-  useEffect(() => {
     if (!bookId || isLoading) return;
     const key = `chat_history_${bookId}`;
     const stored = localStorage.getItem(key);
@@ -941,11 +664,6 @@ export default function ReaderInner() {
     }
     initialLoadDone.current = true;
   }, [bookId, isLoading]);
-
-  useEffect(() => {
-    if (!bookId) return;
-    getNotes(bookId).then(setNotes);
-  }, [bookId]);
 
   useEffect(() => {
     if (!initialLoadDone.current || !bookId) return;
@@ -969,25 +687,11 @@ export default function ReaderInner() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setBookTitle(file.name.replace(/\.(pdf|epub|txt)$/i, ""));
-    setIsLoading(true);
-    setTocItems([]);
-
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      if (file.name.toLowerCase().endsWith(".txt")) {
-        setBookFormat("txt");
-        setExtractedText(await file.text());
-      } else if (file.name.toLowerCase().endsWith(".epub")) {
-        setBookFormat("epub");
-        loadPdf(arrayBuffer);
-      } else {
-        setBookFormat("pdf");
-        loadPdf(arrayBuffer);
-      }
+      await loadLocalFile(file);
     } catch (err) {
       console.error("文件解析失败:", err);
-    } finally { setIsLoading(false); }
+    }
     e.target.value = "";
   };
 
@@ -1148,7 +852,7 @@ export default function ReaderInner() {
     setContextMenu({ x, y, selectedText: text });
   }, []);
 
-  const handleEpubTextSelected = useCallback((text: string, x: number, y: number, cfiRange: string) => {
+  const handleEpubTextSelected = useCallback((text: string, x: number, y: number) => {
     if (isCodeSnippet(text)) {
       setTranslatePopover({ x, y, word: text, loading: false, result: "", rectBottom: y, isCode: true });
       return;
@@ -1214,103 +918,19 @@ export default function ReaderInner() {
     setTranslatePopover(null);
   }, [translatePopover, sendMessage]);
 
-  const buildNoteAnchor = useCallback((quote: string): Note["anchor"] => {
-    const textOffset = bookFormat === "txt" && quote ? Math.max(0, extractedText.indexOf(quote)) : undefined;
-    return {
-      format: bookFormat,
-      pageNumber: activePage,
-      epubCfi: bookFormat === "epub" ? currentEpubCfi || initialCfi || undefined : undefined,
-      textOffset,
-    };
-  }, [activePage, bookFormat, currentEpubCfi, extractedText, initialCfi]);
-
   const handleStartNote = useCallback(() => {
     if (!translatePopover) return;
-    setEditingNote({
-      quote: translatePopover.word,
-      pageNumber: activePage,
-      content: "",
-      isEditing: false,
-      anchor: buildNoteAnchor(translatePopover.word),
-    });
+    startSelectionNote(translatePopover.word);
     setSidebarTab("notes");
     setIsSidebarOpen(true);
     setTranslatePopover(null);
-  }, [translatePopover, activePage, buildNoteAnchor]);
+  }, [startSelectionNote, translatePopover]);
 
   const handleStartManualNote = useCallback(() => {
-    setEditingNote({
-      quote: bookFormat === "txt" ? "当前位置" : `第 ${activePage} 页`,
-      pageNumber: activePage,
-      content: "",
-      isEditing: false,
-      anchor: buildNoteAnchor(""),
-    });
+    startManualNote();
     setSidebarTab("notes");
     setIsSidebarOpen(true);
-  }, [activePage, bookFormat, buildNoteAnchor]);
-
-  const handleSaveEditingNote = useCallback(async () => {
-    if (!editingNote || !editingNote.content.trim() || !bookId) return;
-    const chapter = getCurrentChapter(editingNote.pageNumber, tocItems);
-    if (editingNote.isEditing && editingNote.id) {
-      const updatedNote: Note = {
-        id: editingNote.id,
-        pageNumber: editingNote.pageNumber,
-        quote: editingNote.quote,
-        content: editingNote.content.trim(),
-        createdAt: Date.now(),
-        chapter,
-        anchor: editingNote.anchor || buildNoteAnchor(editingNote.quote),
-      };
-      const updated = await updateNote(bookId, updatedNote);
-      setNotes(updated);
-    } else {
-      const note: Note = {
-        id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        pageNumber: editingNote.pageNumber,
-        quote: editingNote.quote,
-        content: editingNote.content.trim(),
-        createdAt: Date.now(),
-        chapter,
-        anchor: editingNote.anchor || buildNoteAnchor(editingNote.quote),
-      };
-      const updated = await saveNote(bookId, note);
-      setNotes(updated);
-    }
-    setEditingNote(null);
-  }, [editingNote, bookId, tocItems, buildNoteAnchor]);
-
-  const handleEditNote = useCallback((note: Note) => {
-    setEditingNote({
-      id: note.id,
-      quote: note.quote,
-      pageNumber: note.pageNumber,
-      content: note.content,
-      isEditing: true,
-      anchor: note.anchor,
-    });
-  }, []);
-
-  const handleExportObsidian = useCallback(() => {
-    if (!bookTitle || notes.length === 0) return;
-    let md = `# 《${bookTitle}》的读书笔记\n`;
-    md += `导出时间：${new Date().toLocaleDateString("zh-CN")}\n\n---\n\n`;
-    [...notes].reverse().forEach((note) => {
-      const ch = note.chapter || "";
-      md += `## [${ch}] - 第 ${note.pageNumber} 页\n`;
-      md += `> ${note.quote}\n\n`;
-      md += `**我的思考**：\n${note.content}\n\n`;
-      md += `[📍 在 AI 阅读器中打开](http://localhost:3000/reader/${bookId}?page=${note.pageNumber})\n\n---\n\n`;
-    });
-    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${bookTitle}-读书笔记.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [bookTitle, notes, bookId]);
+  }, [startManualNote]);
 
   const runAppCommand = useCallback((command: string) => {
     if (command === "import-book") fileInputRef.current?.click();
@@ -1389,7 +1009,7 @@ export default function ReaderInner() {
     const onEpubTextSelect = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.text) {
-        handleEpubTextSelected(detail.text, detail.x, detail.y, '');
+        handleEpubTextSelected(detail.text, detail.x, detail.y);
       }
     };
     const onEpubContextMenu = (e: Event) => {
@@ -1845,14 +1465,14 @@ export default function ReaderInner() {
                 <textarea value={editingNote.content} onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })} placeholder="写下你的想法..." aria-label="笔记内容" className="mb-3 min-h-[80px] w-full resize-none rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] p-3 text-[15px] leading-7 text-[var(--note-body)] outline-none placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--accent)]" />
                 <div className="flex items-center justify-end gap-2">
                   <button onClick={() => setEditingNote(null)} className="cursor-pointer rounded-lg px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--foreground)]">取消</button>
-                  <button onClick={handleSaveEditingNote} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-contrast)] transition-opacity hover:opacity-90"><Bookmark size={12} />{editingNote.isEditing ? "更新笔记" : "保存笔记"}</button>
+                  <button onClick={saveEditingNote} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-contrast)] transition-opacity hover:opacity-90"><Bookmark size={12} />{editingNote.isEditing ? "更新笔记" : "保存笔记"}</button>
                 </div>
               </div>
             )}
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-medium text-[var(--text-muted)]">共 {notes.length} 条笔记</span>
               {notes.length > 0 && (
-                <button onClick={handleExportObsidian} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] px-2.5 text-[10px] text-[var(--text-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><Download size={11} />导出到 Obsidian</button>
+                <button onClick={exportObsidian} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-lg border border-[var(--panel-border)] px-2.5 text-[10px] text-[var(--text-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"><Download size={11} />导出到 Obsidian</button>
               )}
             </div>
             {notes.length === 0 ? (
@@ -1867,8 +1487,8 @@ export default function ReaderInner() {
                         {note.chapter && <span className="text-[10px] text-[var(--text-muted)]">| {note.chapter}</span>}
                       </span>
                       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button onClick={(e) => { e.stopPropagation(); handleEditNote(note); }} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--accent)]" aria-label="编辑笔记"><Edit size={12} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); deleteNote(bookId!, note.id).then(setNotes); }} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400" aria-label="删除笔记"><Trash2 size={12} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); editNote(note); }} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--input-bg)] hover:text-[var(--accent)]" aria-label="编辑笔记"><Edit size={12} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteReaderNote(note.id); }} className="flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400" aria-label="删除笔记"><Trash2 size={12} /></button>
                       </div>
                     </div>
                     <p className="mb-3 border-l-2 border-[var(--accent)]/50 pl-3 text-sm leading-relaxed text-[var(--note-quote)]">“{note.quote}”</p>
@@ -2005,30 +1625,12 @@ export default function ReaderInner() {
             className="block min-h-8 w-full rounded-md px-3 text-left font-sans text-xs text-[var(--foreground)] hover:bg-[var(--input-bg)]"
             onClick={async (e) => {
               e.stopPropagation();
-              const localNotes = JSON.parse(localStorage.getItem('my_reader_notes') || '[]');
-              localNotes.push({
-                id: Date.now().toString(),
-                timestamp: new Date().toLocaleString(),
-                type: 'ai_selection_snapshot',
-                content: aiContextMenu.text
-              });
-              localStorage.setItem('my_reader_notes', JSON.stringify(localNotes));
-              const chapter = getCurrentChapter(activePage, tocItems);
-              const note: Note = {
-                id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                pageNumber: activePage,
-                quote: aiContextMenu.text,
-                content: '',
-                createdAt: Date.now(),
-                chapter,
-              };
-              const updated = await saveNote(bookId!, note);
-              setNotes(updated);
+              await saveAiSelectionNote(aiContextMenu.text);
               setAiContextMenu(null);
               alert('已成功将选中的 AI 回答内容加入笔记！');
             }}
           >
-            📁 将选中 AI 内容加入笔记
+            <span className="inline-flex items-center gap-2"><StickyNote size={13} />将选中 AI 内容加入笔记</span>
           </button>
         </div>
       )}

@@ -250,8 +250,8 @@ const PDFViewer = forwardRef<PDFViewerHandle, PDFViewerProps>(({
       <Document
         file={pdfFile}
         onLoadSuccess={handleLoadSuccess}
-        onLoadError={(error: Error) => console.error("🚨 PDF 加载失败:", error.message)}
-        onSourceError={(error: Error) => console.error("🚨 PDF 数据源错误:", error.message)}
+        onLoadError={(error: Error) => console.error("PDF 加载失败:", error.message)}
+        onSourceError={(error: Error) => console.error("PDF 数据源错误:", error.message)}
         options={pdfOptions}
         loading={<div className="py-20 text-center text-sm text-[var(--text-muted)]">正在渲染高清页面...</div>}
         className="flex flex-col items-center gap-5 py-8"

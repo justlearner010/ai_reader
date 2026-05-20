@@ -159,7 +159,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
       rendition.resize();
       if (stableCfi) {
         void rendition.display(stableCfi).catch((err: unknown) => {
-          console.warn("⚠️ [EPUB RESIZE] 恢复阅读位置失败:", err);
+          console.warn("[EPUB RESIZE] 恢复阅读位置失败:", err);
         });
       }
 
@@ -169,7 +169,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
           rendition.resize();
           if (stableCfi) {
             void rendition.display(stableCfi).catch((err: unknown) => {
-              console.warn("⚠️ [EPUB RESIZE] 二次恢复阅读位置失败:", err);
+              console.warn("[EPUB RESIZE] 二次恢复阅读位置失败:", err);
             });
           }
         } catch {}
@@ -180,7 +180,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
       }, 180);
     } catch (err) {
       isRestoringLayoutRef.current = false;
-      console.warn("⚠️ [EPUB RESIZE] 容器尺寸变化后重排失败:", err);
+      console.warn("[EPUB RESIZE] 容器尺寸变化后重排失败:", err);
     }
   }, []);
 
@@ -243,7 +243,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
         });
 
         if (eventCleanupRef.current) {
-          try { eventCleanupRef.current(); } catch(e) {}
+          try { eventCleanupRef.current(); } catch {}
           eventCleanupRef.current = null;
         }
 
@@ -257,7 +257,6 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
               const selectedText = selection ? selection.toString().trim() : '';
 
               if (selectedText) {
-                console.log("🎯 [BUS] iframe 内捕获选中文本，向外派发:", selectedText);
                 const iframe = viewerRef.current?.querySelector('iframe');
                 const iframeRect = iframe?.getBoundingClientRect();
                 const clientX = (iframeRect?.left || 0) + e.clientX;
@@ -299,7 +298,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
             };
           }
         } catch (err) {
-          console.warn("⚠️ [EVENT PATCH] 事件代理失败:", err);
+          console.warn("[EVENT PATCH] 事件代理失败:", err);
         }
       });
 
@@ -308,7 +307,6 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
           if (isRestoringLayoutRef.current) return;
           const cfi = location.start.cfi;
           currentCfiRef.current = cfi;
-          console.log("📖 [EPUB] relocated =>", cfi);
           localStorage.setItem(`epub_progress_${bookId}`, cfi);
           if (onProgress) { onProgress(cfi); }
         }
@@ -330,7 +328,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
               if (texts.length > 0) onTextExtracted(texts.join('\n\n'));
             }
           } catch (err) {
-            console.warn('⚠️ [EPUB TEXT] 页面试取失败:', err);
+            console.warn('[EPUB TEXT] 页面试取失败:', err);
           }
         });
       }
@@ -356,20 +354,18 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
 
       const tocResolved = extractToc(book.navigation);
       if (tocResolved) {
-        console.log("📚 [TOC] book.navigation.toc 目录提取成功:", tocResolved.length, "项");
         setToc(tocResolved);
       } else if (book.loaded?.navigation) {
         book.loaded.navigation.then((nav: any) => {
           const tocData = extractToc(nav);
           if (tocData) {
-            console.log("📚 [TOC] book.loaded.navigation 目录提取成功:", tocData.length, "项");
             setToc(tocData);
           } else {
-            console.warn("⚠️ [TOC] 未在导航中找到目录，尝试 spine 回退");
+            console.warn("[TOC] 未在导航中找到目录，尝试 spine 回退");
             fallbackToc();
           }
         }).catch((err: any) => {
-          console.warn("⚠️ [TOC] book.loaded.navigation 加载失败:", err);
+          console.warn("[TOC] book.loaded.navigation 加载失败:", err);
           fallbackToc();
         });
       } else {
@@ -384,13 +380,12 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
               label: `章节 ${idx + 1}`,
               href: item.href || ''
             }));
-            console.log("📚 [TOC] spine 回退生成目录:", fallback.length, "项");
             setToc(fallback);
           } else {
-            console.warn("⚠️ [TOC] spine 也无数据，无法生成目录");
+            console.warn("[TOC] spine 也无数据，无法生成目录");
           }
         } catch (e) {
-          console.warn("⚠️ [TOC] spine 回退失败:", e);
+          console.warn("[TOC] spine 回退失败:", e);
         }
       }
 
@@ -401,21 +396,16 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
 
       if (finalCfi) {
         currentCfiRef.current = finalCfi;
-        console.log("🎯 [STABLE LOCATION] 目标CFI:", finalCfi, "(来源:", cfiFromUrl ? "URL" : savedCfi ? "localStorage" : "initialCfi", ")");
       }
 
       const performDisplay = (): Promise<void> => {
         if (finalCfi) {
-          const perfStart = performance.now();
           return rendition.display(finalCfi).then(() => {
-            const elapsed = (performance.now() - perfStart).toFixed(0);
-            console.log(`✅ [EPUB] display 完成 (${elapsed}ms), 触发 resize 校准`);
             setTimeout(() => {
               rendition.resize();
-              console.log("📐 [EPUB] resize 校准完成");
             }, 100);
           }).catch((err: any) => {
-            console.warn("⚠️ [EPUB] display(cfi) 失败:", finalCfi, err);
+            console.warn("[EPUB] display(cfi) 失败:", finalCfi, err);
             return rendition.display();
           });
         } else {
@@ -449,15 +439,15 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
       isCurrent = false;
       setIsLoaded(false);
       if (eventCleanupRef.current) {
-        try { eventCleanupRef.current(); } catch(e) {}
+        try { eventCleanupRef.current(); } catch {}
         eventCleanupRef.current = null;
       }
       if (resizeTimerRef.current !== null) {
         window.clearTimeout(resizeTimerRef.current);
         resizeTimerRef.current = null;
       }
-      if (rendition) { try { rendition.destroy(); } catch(e){} }
-      if (book) { try { book.destroy(); } catch(e){} }
+      if (rendition) { try { rendition.destroy(); } catch {} }
+      if (book) { try { book.destroy(); } catch {} }
     };
   }, [fileData]);
 
@@ -530,7 +520,7 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
         });
       });
       restoreRenditionLayout(renditionRef.current);
-    } catch (e) {}
+    } catch {}
   }, [theme, fontSize, fontFamily, wordSpacing, isLoaded, restoreRenditionLayout]);
 
   return (
@@ -556,7 +546,6 @@ export const EpubViewer: React.FC<EpubViewerProps> = ({
               <button
                 key={idx}
                 onClick={() => {
-                  console.log("🚀 [TOC JUMP] 用户点击目录，狙击至:", item.href);
                   renditionRef.current?.display(item.href);
                 }}
                 className="min-h-8 w-full truncate rounded-lg px-2 text-left font-sans text-xs transition-colors"
